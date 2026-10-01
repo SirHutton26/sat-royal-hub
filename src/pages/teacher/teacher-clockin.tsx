@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { LogIn, LogOut, CheckCircle2, Clock, Calendar, AlertCircle, QrCode, X } from 'lucide-react'
+import { LogOut, CheckCircle2, Clock, Calendar, AlertCircle, QrCode, X } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
