@@ -231,7 +231,6 @@ export default function TeacherClockIn() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-
             <div className="mt-4 overflow-hidden rounded-xl bg-black">
               <Scanner
                 onScan={(codes) => handleScan(codes)}
