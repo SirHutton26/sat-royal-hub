@@ -7,12 +7,11 @@ import schoolLogo from '@/assets/school-logo.png'
 
 interface AttendanceRecord {
   id: string
-  check_in_time: string | null
-  check_out_time: string | null
+  clock_in_at: string | null
+  clock_out_at: string | null
   status: string
 }
 
-// Secret campus token that matches your printed QR code (e.g., encoded in the QR code graphic)
 const VALID_CAMPUS_QR_SECRET = 'SAT-ROYAL-CAMPUS-CHECKIN-2026'
 
 export default function TeacherClockIn() {
@@ -38,7 +37,7 @@ export default function TeacherClockIn() {
 
     const { data, error } = await supabase
       .from('staff_attendance')
-      .select('id, check_in_time, check_out_time, status')
+      .select('id, clock_in_at, clock_out_at, status')
       .eq('teacher_id', profile.id)
       .eq('date', todayDate)
       .maybeSingle()
@@ -55,7 +54,6 @@ export default function TeacherClockIn() {
     fetchTodayAttendance()
   }, [profile])
 
-  // Handle successful QR scan for Check-In
   async function handleScan(result: any) {
     if (!result) return
     const scannedText = typeof result === 'string' ? result : result[0]?.rawValue || result?.text
@@ -66,7 +64,6 @@ export default function TeacherClockIn() {
       return
     }
 
-    // Valid QR code scanned on campus! Proceed to check in.
     setShowScanner(false)
     setActionLoading(true)
     setToast(null)
@@ -80,12 +77,12 @@ export default function TeacherClockIn() {
         {
           teacher_id: profile?.id,
           date: todayDate,
-          check_in_time: nowIso,
-          status: 'Checked In',
+          clock_in_at: nowIso,
+          status: 'Present',
         },
         { onConflict: 'teacher_id,date' }
       )
-      .select('id, check_in_time, check_out_time, status')
+      .select('id, clock_in_at, clock_out_at, status')
       .single()
 
     setActionLoading(false)
@@ -97,7 +94,6 @@ export default function TeacherClockIn() {
     }
   }
 
-  // Handle Sign-Out (Departure - doesn't require QR code, or can optionally require it too)
   async function handleSignOut() {
     if (!profile || !attendance) return
     setActionLoading(true)
@@ -108,11 +104,11 @@ export default function TeacherClockIn() {
     const { data, error } = await supabase
       .from('staff_attendance')
       .update({
-        check_out_time: nowIso,
+        clock_out_at: nowIso,
         status: 'Signed Out',
       })
       .eq('id', attendance.id)
-      .select('id, check_in_time, check_out_time, status')
+      .select('id, clock_in_at, clock_out_at, status')
       .single()
 
     setActionLoading(false)
@@ -133,12 +129,11 @@ export default function TeacherClockIn() {
     return <p className="p-6 text-sm text-gray-400">Loading attendance status...</p>
   }
 
-  const hasCheckedIn = !!attendance?.check_in_time
-  const hasSignedOut = !!attendance?.check_out_time
+  const hasCheckedIn = !!attendance?.clock_in_at
+  const hasSignedOut = !!attendance?.clock_out_at
 
   return (
-    <div className="max-w-xl mx-auto py-6 px-4">
-      {/* Toast Notification */}
+    <div className="mx-auto max-w-xl px-4 py-6">
       {toast && (
         <div
           className={`mb-4 flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-white shadow-md ${
@@ -150,7 +145,6 @@ export default function TeacherClockIn() {
         </div>
       )}
 
-      {/* Header card */}
       <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-royal-50 p-2 text-royal-600 shadow-inner">
           <img src={schoolLogo} alt="Logo" className="h-12 w-12 object-contain" />
@@ -161,30 +155,27 @@ export default function TeacherClockIn() {
           <Calendar className="h-3.5 w-3.5" /> {todayStr}
         </p>
 
-        {/* Status indicator pill */}
         <div className="mt-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold">
           {!hasCheckedIn && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Not Checked In Yet</span>}
           {hasCheckedIn && !hasSignedOut && <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">Currently on Campus (Checked In)</span>}
           {hasSignedOut && <span className="rounded-full bg-royal-100 px-3 py-1 text-royal-800">Day Completed (Signed Out)</span>}
         </div>
 
-        {/* Timestamps Grid */}
-        <div className="mt-6 grid grid-cols-2 gap-4 rounded-xl bg-gray-50 p-4 border border-gray-100 text-sm">
+        <div className="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm">
           <div>
-            <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+            <p className="flex items-center justify-center gap-1 text-xs text-gray-500">
               <Clock className="h-3.5 w-3.5" /> Check-In Time
             </p>
-            <p className="mt-1 text-base font-bold text-royal-900">{formatTime(attendance?.check_in_time ?? null)}</p>
+            <p className="mt-1 text-base font-bold text-royal-900">{formatTime(attendance?.clock_in_at ?? null)}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+            <p className="flex items-center justify-center gap-1 text-xs text-gray-500">
               <Clock className="h-3.5 w-3.5" /> Sign-Out Time
             </p>
-            <p className="mt-1 text-base font-bold text-royal-900">{formatTime(attendance?.check_out_time ?? null)}</p>
+            <p className="mt-1 text-base font-bold text-royal-900">{formatTime(attendance?.clock_out_at ?? null)}</p>
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="mt-8 space-y-3">
           {!hasCheckedIn && (
             <button
@@ -216,12 +207,11 @@ export default function TeacherClockIn() {
         </div>
       </div>
 
-      {/* QR Code Scanner Modal Overlay */}
       {showScanner && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 p-4">
           <div className="relative w-full max-w-sm rounded-2xl bg-white p-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-royal-900 flex items-center gap-2">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-royal-900">
                 <QrCode className="h-4 w-4 text-royal-600" /> Scan Campus QR Code
               </h3>
               <button
@@ -231,10 +221,11 @@ export default function TeacherClockIn() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <div className="mt-4 overflow-hidden rounded-xl bg-black">
               <Scanner
-                onScan={(codes) => handleScan(codes)}
-                onError={(error) => console.log(error?.message)}
+                onScan={(text: any) => handleScan(text)}
+                onError={(error: any) => console.log(error?.message)}
                 constraints={{ facingMode: 'environment' }}
               />
             </div>
