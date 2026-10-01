@@ -4,7 +4,9 @@ import {
   LayoutDashboard,
   Users,
   ClipboardCheck,
-  BookOpen,
+  Database,
+  FileText,
+  ClipboardList,
   QrCode,
   LogOut,
   ChevronRight,
@@ -18,7 +20,9 @@ const navItems = [
   { label: 'Dashboard', to: '/teacher', icon: LayoutDashboard, end: true },
   { label: 'My Class', to: '/teacher/class', icon: Users },
   { label: 'Attendance', to: '/teacher/attendance', icon: ClipboardCheck },
-  { label: 'Grades', to: '/teacher/grades', icon: BookOpen },
+  // { label: 'Score Bank', to: '/teacher/score-bank', icon: Database },
+  // { label: 'Exams', to: '/teacher/exams', icon: FileText },
+  // { label: 'SBA', to: '/teacher/sba', icon: ClipboardList },
   { label: 'Clock In', to: '/teacher/clock-in', icon: QrCode },
 ]
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Plus,
-  ClipboardList,
+  Database,
   ChevronRight,
   Save,
   Search,
@@ -27,7 +27,7 @@ interface Student {
   admission_number: string
 }
 
-interface RecentQuiz {
+interface RecentEntry {
   id: string
   title: string
   subject: string
@@ -39,10 +39,6 @@ interface RecentQuiz {
 
 type View = 'home' | 'pick-context' | 'set-total' | 'scores'
 type ToastState = { type: 'success' | 'error'; message: string } | null
-
-function todayLabel() {
-  return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
 
 function scoreInputClasses(score: string | undefined, total: number) {
   if (!score) return 'border-gray-300 focus:border-royal-500 focus:ring-royal-100'
@@ -58,10 +54,10 @@ function SavingOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-royal-900/40 backdrop-blur-sm">
       <div className="relative flex h-20 w-20 items-center justify-center">
-        <span className="absolute inset-0 animate-spin rounded-full border-4 border-gold-400 border-t-transparent" />
+        <span className="absolute inset-0 animate-spin rounded-full border-4 border-royal-400 border-t-transparent" />
         <img src={schoolLogo} alt="" className="h-14 w-14 rounded-full bg-white object-contain p-1" />
       </div>
-      <p className="mt-4 text-sm font-medium text-white">Saving quiz...</p>
+      <p className="mt-4 text-sm font-medium text-white">Saving scores...</p>
     </div>
   )
 }
@@ -89,10 +85,10 @@ function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
   )
 }
 
-export default function TeacherQuiz() {
+export default function TeacherScoreBank() {
   const { profile } = useAuth()
   const [contexts, setContexts] = useState<TeachingContext[]>([])
-  const [recent, setRecent] = useState<RecentQuiz[]>([])
+  const [recent, setRecent] = useState<RecentEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('home')
 
@@ -101,7 +97,7 @@ export default function TeacherQuiz() {
   const [term, setTerm] = useState(TERMS[0])
   const [title, setTitle] = useState('')
   const [totalScore, setTotalScore] = useState('')
-  const [quizId, setQuizId] = useState<string | null>(null)
+  const [entryId, setEntryId] = useState<string | null>(null)
   const [students, setStudents] = useState<Student[]>([])
   const [scores, setScores] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -148,11 +144,11 @@ export default function TeacherQuiz() {
 
   async function loadRecent() {
     const { data } = await supabase
-      .from('quizzes')
+      .from('score_bank_entries')
       .select('id, title, subject, term, total_score, created_at, class:classes(name)')
       .order('created_at', { ascending: false })
       .limit(15)
-    setRecent((data as unknown as RecentQuiz[]) ?? [])
+    setRecent((data as unknown as RecentEntry[]) ?? [])
   }
 
   async function loadAll() {
@@ -167,7 +163,7 @@ export default function TeacherQuiz() {
   }, [profile])
 
   function startCreate() {
-    setQuizId(null)
+    setEntryId(null)
     setClassId(contexts[0]?.classId ?? '')
     setSubject(contexts[0]?.subjects[0] ?? '')
     setTerm(TERMS[0])
@@ -184,6 +180,10 @@ export default function TeacherQuiz() {
   }
 
   async function goToScores() {
+    if (!title.trim()) {
+      setMessage('Enter a title, e.g. Task 1, Quiz 1, Class Test.')
+      return
+    }
     if (!totalScore || Number(totalScore) <= 0) {
       setMessage('Enter a valid total score.')
       return
@@ -201,22 +201,22 @@ export default function TeacherQuiz() {
     setView('scores')
   }
 
-  async function openExisting(q: RecentQuiz) {
+  async function openExisting(entry: RecentEntry) {
     setMessage(null)
     setSearchQuery('')
-    setQuizId(q.id)
-    setTitle(q.title)
-    setSubject(q.subject)
-    setTerm(q.term)
-    setTotalScore(String(q.total_score))
+    setEntryId(entry.id)
+    setTitle(entry.title)
+    setSubject(entry.subject)
+    setTerm(entry.term)
+    setTotalScore(String(entry.total_score))
 
-    const { data: quizRow } = await supabase.from('quizzes').select('class_id').eq('id', q.id).single()
-    const cId = quizRow?.class_id ?? ''
+    const { data: entryRow } = await supabase.from('score_bank_entries').select('class_id').eq('id', entry.id).single()
+    const cId = entryRow?.class_id ?? ''
     setClassId(cId)
 
     const [studentsRes, scoresRes] = await Promise.all([
       supabase.from('students').select('id, full_name, admission_number').eq('class_id', cId).eq('is_active', true).order('full_name'),
-      supabase.from('quiz_scores').select('student_id, score').eq('quiz_id', q.id),
+      supabase.from('score_bank_scores').select('student_id, score').eq('entry_id', entry.id),
     ])
     setStudents(studentsRes.data ?? [])
     const map: Record<string, string> = {}
@@ -238,20 +238,20 @@ export default function TeacherQuiz() {
     setScores((prev) => ({ ...prev, [studentId]: String(num) }))
   }
 
-  async function saveQuiz() {
+  async function saveEntry() {
     if (!profile) return
     setSaving(true)
 
-    let currentQuizId = quizId
+    let currentEntryId = entryId
 
-    if (!currentQuizId) {
+    if (!currentEntryId) {
       const { data, error } = await supabase
-        .from('quizzes')
+        .from('score_bank_entries')
         .insert({
           class_id: classId,
           subject,
           term,
-          title: title.trim() || `${subject} Quiz`,
+          title: title.trim(),
           total_score: Number(totalScore),
           teacher_id: profile.id,
         })
@@ -259,19 +259,19 @@ export default function TeacherQuiz() {
         .single()
       if (error || !data) {
         setSaving(false)
-        setToast({ type: 'error', message: error?.message ?? 'Could not create the quiz.' })
+        setToast({ type: 'error', message: error?.message ?? 'Could not create the entry.' })
         return
       }
-      currentQuizId = data.id
-      setQuizId(currentQuizId)
+      currentEntryId = data.id
+      setEntryId(currentEntryId)
     }
 
     const rows = students
       .filter((s) => scores[s.id] !== undefined && scores[s.id] !== '')
-      .map((s) => ({ quiz_id: currentQuizId, student_id: s.id, score: Number(scores[s.id]) }))
+      .map((s) => ({ entry_id: currentEntryId, student_id: s.id, score: Number(scores[s.id]) }))
 
     if (rows.length > 0) {
-      const { error } = await supabase.from('quiz_scores').upsert(rows, { onConflict: 'quiz_id,student_id' })
+      const { error } = await supabase.from('score_bank_scores').upsert(rows, { onConflict: 'entry_id,student_id' })
       if (error) {
         setSaving(false)
         setToast({ type: 'error', message: error.message })
@@ -280,7 +280,7 @@ export default function TeacherQuiz() {
     }
 
     setSaving(false)
-    setToast({ type: 'success', message: 'Quiz saved successfully!' })
+    setToast({ type: 'success', message: 'Score entry saved successfully!' })
     await loadRecent()
   }
 
@@ -299,42 +299,43 @@ export default function TeacherQuiz() {
   if (view === 'home') {
     return (
       <div>
-        <h1 className="text-xl font-semibold text-royal-900">Quizzes</h1>
+        <h1 className="text-xl font-semibold text-royal-900">Score Bank</h1>
+        <p className="mt-1 text-sm text-gray-500">Tasks, quizzes, tests and group work — all feed into SBA later.</p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <button
             onClick={startCreate}
             disabled={contexts.length === 0}
-            className="flex items-center gap-4 rounded-2xl border border-gold-400/30 bg-[#FFFBEF] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50"
+            className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md disabled:opacity-50"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-royal-600 text-white">
               <Plus className="h-6 w-6" />
             </div>
             <div>
-              <p className="font-semibold text-royal-900">Create Quiz</p>
-              <p className="mt-0.5 text-xs text-gray-500">Pick a subject and enter scores</p>
+              <p className="font-semibold text-royal-900">Add Score Entry</p>
+              <p className="mt-0.5 text-xs text-gray-500">Pick a subject, title it, enter scores</p>
             </div>
           </button>
 
-          <div className="rounded-2xl border border-gold-400/30 bg-[#FFFBEF] p-5 shadow-sm">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-gold-500" />
-              <p className="font-semibold text-royal-900">Recent Quizzes</p>
+              <Database className="h-5 w-5 text-royal-500" />
+              <p className="font-semibold text-royal-900">Recent Entries</p>
             </div>
             {recent.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">No quizzes yet.</p>
+              <p className="mt-3 text-sm text-gray-400">No entries yet.</p>
             ) : (
               <div className="mt-3 space-y-2">
-                {recent.map((q) => (
+                {recent.map((e) => (
                   <button
-                    key={q.id}
-                    onClick={() => openExisting(q)}
-                    className="flex w-full items-center justify-between rounded-lg bg-white px-3 py-2 text-left text-sm transition hover:bg-royal-50"
+                    key={e.id}
+                    onClick={() => openExisting(e)}
+                    className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-left text-sm transition hover:bg-royal-50"
                   >
                     <div>
-                      <p className="font-medium text-royal-900">{q.title}</p>
+                      <p className="font-medium text-royal-900">{e.title}</p>
                       <p className="text-xs text-gray-500">
-                        {q.subject} · {q.class?.name} · {q.term} · /{q.total_score}
+                        {e.subject} · {e.class?.name} · {e.term} · /{e.total_score}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-gray-300" />
@@ -347,7 +348,7 @@ export default function TeacherQuiz() {
 
         {contexts.length === 0 && (
           <p className="mt-4 text-sm text-gray-400">
-            You don't have a class or subject assignment yet, so quizzes aren't available.
+            You don't have a class or subject assignment yet, so the Score Bank isn't available.
           </p>
         )}
 
@@ -362,9 +363,9 @@ export default function TeacherQuiz() {
         <button onClick={() => setView('home')} className="flex items-center gap-1 text-sm text-royal-600 hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
-        <h1 className="mt-2 text-xl font-semibold text-royal-900">New quiz</h1>
+        <h1 className="mt-2 text-xl font-semibold text-royal-900">New score entry</h1>
 
-        <div className="mt-4 max-w-sm space-y-3 rounded-2xl border border-gold-400/30 bg-[#FFFBEF] p-5 shadow-sm">
+        <div className="mt-4 max-w-sm space-y-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           {contexts.length > 1 && (
             <div>
               <label className="block text-sm font-medium text-royal-900">Class</label>
@@ -444,24 +445,24 @@ export default function TeacherQuiz() {
           {subject} · {activeContext?.className}
         </h1>
 
-        <div className="mt-4 max-w-sm space-y-3 rounded-2xl border border-gold-400/30 bg-[#FFFBEF] p-5 shadow-sm">
+        <div className="mt-4 max-w-sm space-y-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div>
-            <label className="block text-sm font-medium text-royal-900">Quiz title (optional)</label>
+            <label className="block text-sm font-medium text-royal-900">Title</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={`e.g. ${subject} Quiz — ${todayLabel()}`}
+              placeholder="e.g. Task 1, Quiz 1, Class Test"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-royal-500 focus:ring-2 focus:ring-royal-100"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-royal-900">Total quiz score</label>
+            <label className="block text-sm font-medium text-royal-900">Total score</label>
             <input
               type="number"
               min={1}
               value={totalScore}
               onChange={(e) => setTotalScore(e.target.value)}
-              placeholder="e.g. 20"
+              placeholder="e.g. 15"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-royal-500 focus:ring-2 focus:ring-royal-100"
             />
           </div>
@@ -477,13 +478,12 @@ export default function TeacherQuiz() {
     )
   }
 
-  // ---------- SCORES ----------
   const total = Number(totalScore) || 0
 
   return (
     <div>
       <button
-        onClick={() => setView(quizId ? 'home' : 'set-total')}
+        onClick={() => setView(entryId ? 'home' : 'set-total')}
         className="flex items-center gap-1 text-sm text-royal-600 hover:underline"
       >
         <ArrowLeft className="h-4 w-4" /> Back
@@ -492,7 +492,7 @@ export default function TeacherQuiz() {
       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-royal-900">
-            {title || `${subject} Quiz`} <span className="text-sm font-normal text-gray-400">/{totalScore}</span>
+            {title} <span className="text-sm font-normal text-gray-400">/{totalScore}</span>
           </h1>
           <p className="text-sm text-gray-500">
             {subject} · {activeContext?.className || ''} · {term}
@@ -568,12 +568,12 @@ export default function TeacherQuiz() {
       {students.length > 0 && (
         <div className="sticky bottom-24 mt-4 flex items-center justify-end rounded-xl bg-white p-3 shadow-lg md:bottom-4">
           <button
-            onClick={saveQuiz}
+            onClick={saveEntry}
             disabled={saving}
             className="flex items-center gap-2 rounded-md bg-royal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-royal-700 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
-            Save quiz
+            Save scores
           </button>
         </div>
       )}

@@ -24,8 +24,11 @@ const TeacherAttendance = lazy(() => import('@/pages/teacher/teacher-attendance'
 const TeacherGrades = lazy(() => import('@/pages/teacher/teacher-grades'))
 const TeacherAlerts = lazy(() => import('@/pages/teacher/teacher-alerts'))
 const TeacherClockIn = lazy(() => import('@/pages/teacher/teacher-clockin'))
-const TeacherQuiz = lazy(() => import('@/pages/teacher/teacher-quiz'))
+const TeacherQuiz = lazy(() => import('@/pages/teacher/teacher-score-bank'))
 const TeacherExams = lazy(() => import('@/pages/teacher/teacher-exams'))
+const TeacherScoreBank = lazy(() => import('@/pages/teacher/teacher-score-bank'))
+const TeacherSba = lazy(() => import('@/pages/teacher/teacher-sba'))
+const TeacherSbaPrint = lazy(() => import('@/pages/teacher/teacher-sba-print'))
 
 export default function App() {
   return (
@@ -60,6 +63,9 @@ export default function App() {
               <Route path="clock-in" element={<TeacherClockIn />} />
               <Route path="quiz" element={<TeacherQuiz />} />
               <Route path="exams" element={<TeacherExams />} />
+              <Route path="score-bank" element={<TeacherScoreBank />} />
+              <Route path="sba" element={<TeacherSba />} /> 
+              <Route path="sba-print" element={<TeacherSbaPrint />} />
               </Route>
             </Route>
 
