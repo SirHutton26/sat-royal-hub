@@ -48,7 +48,7 @@ export default function App() {
                 <Route path="subjects" element={<AdminSubjects />} />
                 <Route path="exams" element={<AdminExams />} />
                 <Route path="settings" element={<AdminSettings />} />
-  <Route path="staff-attendance" element={<AdminStaffAttendance />} />
+                <Route path="staff-attendance" element={<AdminStaffAttendance />} />
               </Route>
             </Route>
 
@@ -65,7 +65,7 @@ export default function App() {
               <Route path="exams" element={<TeacherExams />} />
               <Route path="score-bank" element={<TeacherScoreBank />} />
               <Route path="sba" element={<TeacherSba />} /> 
-              <Route path="sba-print" element={<TeacherSbaPrint />} />
+              <Route path="sba/print" element={<TeacherSbaPrint />} />
               </Route>
             </Route>
 

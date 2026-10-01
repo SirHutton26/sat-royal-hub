@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Plus,
-  Database,
+  BookOpen,
   ChevronRight,
   Save,
   Search,
   CheckCircle2,
   AlertCircle,
+  Trash2,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -29,12 +30,20 @@ interface Student {
 
 interface RecentEntry {
   id: string
+  class_id: string
   title: string
   subject: string
   term: string
   total_score: number
   created_at: string
   class: { name: string } | null
+}
+
+interface SubjectGroup {
+  key: string
+  subject: string
+  className: string
+  entries: RecentEntry[]
 }
 
 type View = 'home' | 'pick-context' | 'set-total' | 'scores'
@@ -104,6 +113,8 @@ export default function TeacherScoreBank() {
   const [message, setMessage] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastState>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [entryToDelete, setEntryToDelete] = useState<RecentEntry | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   async function loadContexts() {
     if (!profile) return
@@ -143,11 +154,12 @@ export default function TeacherScoreBank() {
   }
 
   async function loadRecent() {
+    if (!profile) return
     const { data } = await supabase
       .from('score_bank_entries')
-      .select('id, title, subject, term, total_score, created_at, class:classes(name)')
+      .select('id, class_id, title, subject, term, total_score, created_at, class:classes(name)')
+      .eq('teacher_id', profile.id)
       .order('created_at', { ascending: false })
-      .limit(15)
     setRecent((data as unknown as RecentEntry[]) ?? [])
   }
 
@@ -210,8 +222,7 @@ export default function TeacherScoreBank() {
     setTerm(entry.term)
     setTotalScore(String(entry.total_score))
 
-    const { data: entryRow } = await supabase.from('score_bank_entries').select('class_id').eq('id', entry.id).single()
-    const cId = entryRow?.class_id ?? ''
+    const cId = entry.class_id
     setClassId(cId)
 
     const [studentsRes, scoresRes] = await Promise.all([
@@ -284,7 +295,52 @@ export default function TeacherScoreBank() {
     await loadRecent()
   }
 
+  async function confirmDelete() {
+    if (!entryToDelete) return
+    setDeleting(true)
+
+    // Remove child scores first (safe even if you have ON DELETE CASCADE)
+    const { error: scoresError } = await supabase
+      .from('score_bank_scores')
+      .delete()
+      .eq('entry_id', entryToDelete.id)
+
+    if (scoresError) {
+      setDeleting(false)
+      setToast({ type: 'error', message: scoresError.message })
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('score_bank_entries')
+      .delete()
+      .eq('id', entryToDelete.id)
+      .select('id')
+
+    setDeleting(false)
+
+    if (error || !data || data.length === 0) {
+      setToast({ type: 'error', message: error?.message ?? 'Could not delete this entry.' })
+      return
+    }
+
+    setRecent((prev) => prev.filter((e) => e.id !== entryToDelete.id))
+    setEntryToDelete(null)
+    setToast({ type: 'success', message: 'Score entry deleted.' })
+  }
+
   const activeContext = useMemo(() => contexts.find((c) => c.classId === classId) ?? null, [contexts, classId])
+
+  const subjectGroups = useMemo<SubjectGroup[]>(() => {
+    const map = new Map<string, SubjectGroup>()
+    for (const e of recent) {
+      const key = `${e.class_id}|${e.subject}`
+      const group = map.get(key)
+      if (group) group.entries.push(e)
+      else map.set(key, { key, subject: e.subject, className: e.class?.name ?? '', entries: [e] })
+    }
+    return Array.from(map.values()).sort((a, b) => a.subject.localeCompare(b.subject))
+  }, [recent])
 
   const filteredStudents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -302,54 +358,108 @@ export default function TeacherScoreBank() {
         <h1 className="text-xl font-semibold text-royal-900">Score Bank</h1>
         <p className="mt-1 text-sm text-gray-500">Tasks, quizzes, tests and group work — all feed into SBA later.</p>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <button
-            onClick={startCreate}
-            disabled={contexts.length === 0}
-            className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md disabled:opacity-50"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-royal-600 text-white">
-              <Plus className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="font-semibold text-royal-900">Add Score Entry</p>
-              <p className="mt-0.5 text-xs text-gray-500">Pick a subject, title it, enter scores</p>
-            </div>
-          </button>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-royal-500" />
-              <p className="font-semibold text-royal-900">Recent Entries</p>
-            </div>
-            {recent.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">No entries yet.</p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {recent.map((e) => (
-                  <button
-                    key={e.id}
-                    onClick={() => openExisting(e)}
-                    className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-left text-sm transition hover:bg-royal-50"
-                  >
-                    <div>
-                      <p className="font-medium text-royal-900">{e.title}</p>
-                      <p className="text-xs text-gray-500">
-                        {e.subject} · {e.class?.name} · {e.term} · /{e.total_score}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300" />
-                  </button>
-                ))}
-              </div>
-            )}
+        <button
+          onClick={startCreate}
+          disabled={contexts.length === 0}
+          className="mt-4 flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md disabled:opacity-50 sm:max-w-sm"
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-royal-600 text-white">
+            <Plus className="h-6 w-6" />
           </div>
-        </div>
+          <div>
+            <p className="font-semibold text-royal-900">Add Score Entry</p>
+            <p className="mt-0.5 text-xs text-gray-500">Pick a subject, title it, enter scores</p>
+          </div>
+        </button>
+
+        <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-gray-500">Your Subjects</h2>
+
+        {subjectGroups.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-400">No entries yet. Add a score entry to see its subject here.</p>
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {subjectGroups.map((group) => (
+              <div key={group.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-royal-50 text-royal-600">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-royal-900">{group.subject}</p>
+                      <p className="text-xs text-gray-500">{group.className}</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-royal-50 px-2.5 py-1 text-xs font-bold text-royal-700">
+                    {group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {group.entries.map((e) => (
+                    <div key={e.id} className="flex items-center gap-1 rounded-lg bg-gray-50 transition hover:bg-royal-50">
+                      <button
+                        onClick={() => openExisting(e)}
+                        className="flex min-w-0 flex-1 items-center justify-between px-3 py-2 text-left text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-royal-900">{e.title}</p>
+                          <p className="text-xs text-gray-500">
+                            {e.term} · /{e.total_score}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                      </button>
+                      <button
+                        onClick={() => setEntryToDelete(e)}
+                        aria-label={`Delete ${e.title}`}
+                        className="mr-1 rounded-md p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {contexts.length === 0 && (
           <p className="mt-4 text-sm text-gray-400">
             You don't have a class or subject assignment yet, so the Score Bank isn't available.
           </p>
+        )}
+
+        {entryToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-royal-900/40 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="mt-3 font-semibold text-royal-900">Delete this score entry?</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                "{entryToDelete.title}" ({entryToDelete.subject}) and all the scores recorded in it will be permanently
+                removed. This can't be undone.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  onClick={() => setEntryToDelete(null)}
+                  disabled={deleting}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         <Toast toast={toast} onClose={() => setToast(null)} />

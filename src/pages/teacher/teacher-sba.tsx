@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, AlertCircle, Save, Loader2, Printer } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  Save,
+  Loader2,
+  Eye,
+  RefreshCw,
+  BookOpen,
+  ChevronRight,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -42,6 +52,14 @@ interface ResultRow {
   total: number | null
   grade: string | null
   position: number | null
+}
+
+interface SavedSba {
+  key: string
+  classId: string
+  className: string
+  subject: string
+  term: string
 }
 
 type View = 'pick-context' | 'configure' | 'results'
@@ -122,6 +140,7 @@ export default function TeacherSba() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [contexts, setContexts] = useState<(TeachingContext & { levelGroup: string | null })[]>([])
+  const [savedSbas, setSavedSbas] = useState<SavedSba[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('pick-context')
   const [toast, setToast] = useState<ToastState>(null)
@@ -140,6 +159,33 @@ export default function TeacherSba() {
   const [computing, setComputing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [hasSaved, setHasSaved] = useState(false)
+  const [opening, setOpening] = useState(false)
+  const [fromSaved, setFromSaved] = useState(false)
+
+  async function loadSaved(list: (TeachingContext & { levelGroup: string | null })[]) {
+    if (!profile) return
+    const { data } = await supabase
+      .from('sba_configs')
+      .select('class_id, subject, term')
+      .eq('teacher_id', profile.id)
+
+    const classNames = new Map(list.map((c) => [c.classId, c.className]))
+    const cards: SavedSba[] = ((data as { class_id: string; subject: string; term: string }[]) ?? []).map((r) => ({
+      key: `${r.class_id}|${r.subject}|${r.term}`,
+      classId: r.class_id,
+      className: classNames.get(r.class_id) ?? '',
+      subject: r.subject,
+      term: r.term,
+    }))
+
+    cards.sort(
+      (a, b) =>
+        a.className.localeCompare(b.className) ||
+        a.subject.localeCompare(b.subject) ||
+        TERMS.indexOf(a.term) - TERMS.indexOf(b.term)
+    )
+    setSavedSbas(cards)
+  }
 
   async function loadContexts() {
     if (!profile) return
@@ -174,6 +220,7 @@ export default function TeacherSba() {
       setClassId(list[0].classId)
       setSubject(list[0].subjects[0] ?? '')
     }
+    await loadSaved(list)
     setLoading(false)
   }
 
@@ -188,6 +235,7 @@ export default function TeacherSba() {
     if (!classId || !subject) return
     setToast(null)
     setHasSaved(false)
+    setFromSaved(false)
 
     const [entriesRes, existingConfigRes] = await Promise.all([
       supabase
@@ -225,6 +273,87 @@ export default function TeacherSba() {
     setView('configure')
   }
 
+  // Open a previously generated SBA straight from its card (no regenerating)
+  async function openSaved(card: SavedSba) {
+    setOpening(true)
+    setToast(null)
+    setClassId(card.classId)
+    setSubject(card.subject)
+    setTerm(card.term)
+    setFromSaved(true)
+
+    const [cfgRes, entriesRes, studentsRes, savedRes] = await Promise.all([
+      supabase
+        .from('sba_configs')
+        .select('entry_ids, exam_session_id')
+        .eq('class_id', card.classId)
+        .eq('subject', card.subject)
+        .eq('term', card.term)
+        .maybeSingle(),
+      supabase
+        .from('score_bank_entries')
+        .select('id, title, total_score')
+        .eq('class_id', card.classId)
+        .eq('subject', card.subject)
+        .eq('term', card.term)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('students')
+        .select('id, full_name, admission_number')
+        .eq('class_id', card.classId)
+        .eq('is_active', true)
+        .order('full_name'),
+      supabase
+        .from('sba_results')
+        .select('student_id, component_a, exam_score, component_b, total_score, grade, position')
+        .eq('class_id', card.classId)
+        .eq('subject', card.subject)
+        .eq('term', card.term),
+    ])
+
+    const entryList: ScoreBankEntry[] = entriesRes.data ?? []
+    const entryIds: string[] = cfgRes.data?.entry_ids ?? []
+    const examId: string = cfgRes.data?.exam_session_id ?? ''
+
+    setEntries(entryList)
+    setSelectedEntryIds(entryIds)
+    setExamSessionId(examId)
+
+    const savedRows = savedRes.data ?? []
+
+    if (savedRows.length > 0) {
+      const savedMap = new Map(savedRows.map((r) => [r.student_id, r]))
+      const merged: ResultRow[] = ((studentsRes.data ?? []) as Student[]).map((s) => {
+        const r = savedMap.get(s.id)
+        return {
+          studentId: s.id,
+          name: s.full_name,
+          admission: s.admission_number,
+          taskScore: null,
+          taskMax: null,
+          componentA: r?.component_a != null ? Number(r.component_a) : null,
+          examScore: r?.exam_score != null ? Number(r.exam_score) : null,
+          componentB: r?.component_b != null ? Number(r.component_b) : null,
+          total: r?.total_score != null ? Number(r.total_score) : null,
+          grade: r?.grade ?? null,
+          position: r?.position ?? null,
+        }
+      })
+      setResults(merged)
+      setHasSaved(true)
+    } else if (entryIds.length === 4 && examId) {
+      // Config exists but results were never saved: compute them once
+      await computeResults(entryIds, examId, entryList)
+      setHasSaved(false)
+    } else {
+      setResults([])
+      setHasSaved(false)
+    }
+
+    setOpening(false)
+    setView('results')
+  }
+
   function toggleEntry(id: string) {
     setSelectedEntryIds((prev) => {
       if (prev.includes(id)) return prev.filter((e) => e !== id)
@@ -257,25 +386,26 @@ export default function TeacherSba() {
       return
     }
 
-    await computeResults()
+    await computeResults(selectedEntryIds, examSessionId, entries)
+    await loadSaved(contexts)
     setConfiguring(false)
     setView('results')
   }
 
-  async function computeResults() {
+  async function computeResults(entryIds: string[], examId: string, entryList: ScoreBankEntry[]) {
     setComputing(true)
     const [studentsRes, scoresRes, examScoresRes] = await Promise.all([
       supabase.from('students').select('id, full_name, admission_number').eq('class_id', classId).eq('is_active', true).order('full_name'),
-      supabase.from('score_bank_scores').select('entry_id, student_id, score').in('entry_id', selectedEntryIds),
-      supabase.from('exam_scores').select('student_id, score').eq('exam_session_id', examSessionId).eq('class_id', classId).eq('subject', subject),
+      supabase.from('score_bank_scores').select('entry_id, student_id, score').in('entry_id', entryIds),
+      supabase.from('exam_scores').select('student_id, score').eq('exam_session_id', examId).eq('class_id', classId).eq('subject', subject),
     ])
 
     const studentList: Student[] = studentsRes.data ?? []
-    const maxTotal = entries.filter((e) => selectedEntryIds.includes(e.id)).reduce((sum, e) => sum + Number(e.total_score), 0)
+    const maxTotal = entryList.filter((e) => entryIds.includes(e.id)).reduce((sum, e) => sum + Number(e.total_score), 0)
     const examMap = new Map((examScoresRes.data ?? []).map((r) => [r.student_id, Number(r.score)]))
 
     const computed: ResultRow[] = studentList.map((s) => {
-      const studentEntryScores = (scoresRes.data ?? []).filter((r) => r.student_id === s.id && selectedEntryIds.includes(r.entry_id))
+      const studentEntryScores = (scoresRes.data ?? []).filter((r) => r.student_id === s.id && entryIds.includes(r.entry_id))
       const hasAllTasks = studentEntryScores.length === 4
       const taskScore = hasAllTasks ? studentEntryScores.reduce((sum, r) => sum + Number(r.score), 0) : null
 
@@ -308,6 +438,17 @@ export default function TeacherSba() {
 
     setResults(withPositions)
     setComputing(false)
+  }
+
+  // Recalculate from the latest Score Bank and exam scores
+  async function recompute() {
+    if (selectedEntryIds.length !== 4 || !examSessionId) {
+      setToast({ type: 'error', message: 'This SBA has no complete setup yet. Go back and configure it.' })
+      return
+    }
+    await computeResults(selectedEntryIds, examSessionId, entries)
+    setHasSaved(false)
+    setToast({ type: 'success', message: 'Results recomputed. Save to keep the changes.' })
   }
 
   async function saveResults() {
@@ -344,7 +485,7 @@ export default function TeacherSba() {
     }
   }
 
-  function goToPrint() {
+  function goToPreview() {
     navigate(`/teacher/sba/print?classId=${classId}&subject=${encodeURIComponent(subject)}&term=${encodeURIComponent(term)}`)
   }
 
@@ -425,6 +566,38 @@ export default function TeacherSba() {
             Next
           </button>
         </div>
+
+        <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-gray-500">Your SBAs</h2>
+
+        {savedSbas.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-400">No SBAs generated yet. Pick a subject above to create one.</p>
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {savedSbas.map((card) => (
+              <button
+                key={card.key}
+                onClick={() => openSaved(card)}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-royal-50 text-royal-600">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-royal-900">{card.subject}</p>
+                    <p className="truncate text-xs text-gray-500">
+                      {card.className} · {card.term}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {opening && <SavingOverlay text="Opening SBA..." />}
+        <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
     )
   }
@@ -506,7 +679,10 @@ export default function TeacherSba() {
   // ---------- RESULTS ----------
   return (
     <div>
-      <button onClick={() => setView('configure')} className="flex items-center gap-1 text-sm text-royal-600 hover:underline">
+      <button
+        onClick={() => setView(fromSaved ? 'pick-context' : 'configure')}
+        className="flex items-center gap-1 text-sm text-royal-600 hover:underline"
+      >
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
       <h1 className="mt-2 text-xl font-semibold text-royal-900">
@@ -574,14 +750,22 @@ export default function TeacherSba() {
 
       {results.length > 0 && (
         <div className="sticky bottom-24 mt-4 flex flex-col items-end gap-2 rounded-xl bg-white p-3 shadow-lg md:bottom-4">
-          {!hasSaved && <p className="text-xs text-gray-400">Save first, then print, so the report shows saved results.</p>}
-          <div className="flex gap-2">
+          {!hasSaved && <p className="text-xs text-gray-400">Save first, then preview, so the report shows saved results.</p>}
+          <div className="flex flex-wrap justify-end gap-2">
             <button
-              onClick={goToPrint}
+              onClick={recompute}
+              disabled={computing}
+              className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-royal-700 transition hover:bg-gray-50 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${computing ? 'animate-spin' : ''}`} />
+              Recompute
+            </button>
+            <button
+              onClick={goToPreview}
               className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-royal-700 transition hover:bg-gray-50"
             >
-              <Printer className="h-4 w-4" />
-              Print
+              <Eye className="h-4 w-4" />
+              Preview
             </button>
             <button
               onClick={saveResults}
