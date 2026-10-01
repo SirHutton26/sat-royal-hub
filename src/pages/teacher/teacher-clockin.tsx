@@ -78,7 +78,7 @@ export default function TeacherClockIn() {
           teacher_id: profile?.id,
           date: todayDate,
           clock_in_at: nowIso,
-          status: 'Present',
+          status: 'Checked In',
         },
         { onConflict: 'teacher_id,date' }
       )
