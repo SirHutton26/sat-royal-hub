@@ -21,6 +21,8 @@ const TeacherLayout = lazy(() => import('@/pages/teacher/teacher-layout'))
 const TeacherDashboard = lazy(() => import('@/pages/teacher/teacher-dashboard'))
 const TeacherClass = lazy(() => import('@/pages/teacher/teacher-class'))
 const TeacherAttendance = lazy(() => import('@/pages/teacher/teacher-attendance'))
+const TeacherMarkAttendance = lazy(() => import('@/pages/teacher/teacher-mark-attendance'))
+const TeacherAttendanceRegister = lazy(() => import('@/pages/teacher/teacher-attendance-register'))
 const TeacherGrades = lazy(() => import('@/pages/teacher/teacher-grades'))
 const TeacherAlerts = lazy(() => import('@/pages/teacher/teacher-alerts'))
 const TeacherClockIn = lazy(() => import('@/pages/teacher/teacher-clockin'))
@@ -58,6 +60,8 @@ export default function App() {
               <Route index element={<TeacherDashboard />} />
               <Route path="class" element={<TeacherClass />} />
               <Route path="attendance" element={<TeacherAttendance />} />
+              <Route path="attendance/mark" element={<TeacherMarkAttendance />} />
+              <Route path="attendance/register" element={<TeacherAttendanceRegister />} />
               <Route path="grades" element={<TeacherGrades />} />
               <Route path="alerts" element={<TeacherAlerts />} />
               <Route path="clock-in" element={<TeacherClockIn />} />

@@ -21,8 +21,24 @@ export default function TeacherClockIn() {
   const [attendance, setAttendance] = useState<AttendanceRecord | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showScanner, setShowScanner] = useState(false)
+  const [scanMode, setScanMode] = useState<'check-in' | 'sign-out'>('check-in')
 
-  const todayStr = new Date().toLocaleDateString('en-GB', {
+  const now = new Date()
+  const currentHour = now.getHours()
+  const currentMinute = now.getMinutes()
+  const timeInMinutes = currentHour * 60 + currentMinute
+
+  // Time window rules in minutes from midnight
+  const CHECK_IN_START = 6 * 60       // 6:00 AM
+  const PRESENT_END = 7 * 60 + 15     // 7:15 AM
+  const LATE_END = 9 * 60 + 15        // 9:15 AM
+  const SIGN_OUT_START = 15 * 60      // 3:00 PM (15:00)
+  const SIGN_OUT_END = 18 * 60        // 6:00 PM (18:00)
+
+  const isMorningCheckInActive = timeInMinutes >= CHECK_IN_START && timeInMinutes <= LATE_END
+  const isAfternoonSignOutActive = timeInMinutes >= SIGN_OUT_START && timeInMinutes <= SIGN_OUT_END
+
+  const todayStr = now.toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -59,7 +75,7 @@ export default function TeacherClockIn() {
     const scannedText = typeof result === 'string' ? result : result[0]?.rawValue || result?.text
 
     if (scannedText !== VALID_CAMPUS_QR_SECRET) {
-      setToast({ type: 'error', message: 'Invalid QR code. Please scan the official campus check-in code at school.' })
+      setToast({ type: 'error', message: 'Invalid QR code. Please scan the official campus code.' })
       setShowScanner(false)
       return
     }
@@ -71,52 +87,53 @@ export default function TeacherClockIn() {
     const todayDate = new Date().toISOString().split('T')[0]
     const nowIso = new Date().toISOString()
 
-    const { data, error } = await supabase
-      .from('staff_attendance')
-      .upsert(
-        {
-          teacher_id: profile?.id,
-          date: todayDate,
-          clock_in_at: nowIso,
-          status: 'Checked In',
-        },
-        { onConflict: 'teacher_id,date' }
-      )
-      .select('id, clock_in_at, clock_out_at, status')
-      .single()
+    if (scanMode === 'check-in') {
+      // Determine status based on arrival time
+      let computedStatus = 'Present'
+      if (timeInMinutes > PRESENT_END && timeInMinutes <= LATE_END) {
+        computedStatus = 'Late'
+      }
 
-    setActionLoading(false)
-    if (error) {
-      setToast({ type: 'error', message: error.message })
-    } else {
-      setAttendance(data)
-      setToast({ type: 'success', message: 'Successfully checked in from campus!' })
-    }
-  }
+      const { data, error } = await supabase
+        .from('staff_attendance')
+        .upsert(
+          {
+            teacher_id: profile?.id,
+            date: todayDate,
+            clock_in_at: nowIso,
+            status: computedStatus,
+          },
+          { onConflict: 'teacher_id,date' }
+        )
+        .select('id, clock_in_at, clock_out_at, status')
+        .single()
 
-  async function handleSignOut() {
-    if (!profile || !attendance) return
-    setActionLoading(true)
-    setToast(null)
+      setActionLoading(false)
+      if (error) {
+        setToast({ type: 'error', message: error.message })
+      } else {
+        setAttendance(data)
+        setToast({ type: 'success', message: `Checked in successfully (${computedStatus})!` })
+      }
+    } else if (scanMode === 'sign-out') {
+      if (!attendance) return
 
-    const nowIso = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('staff_attendance')
+        .update({
+          clock_out_at: nowIso,
+        })
+        .eq('id', attendance.id)
+        .select('id, clock_in_at, clock_out_at, status')
+        .single()
 
-    const { data, error } = await supabase
-      .from('staff_attendance')
-      .update({
-        clock_out_at: nowIso,
-        status: 'Signed Out',
-      })
-      .eq('id', attendance.id)
-      .select('id, clock_in_at, clock_out_at, status')
-      .single()
-
-    setActionLoading(false)
-    if (error) {
-      setToast({ type: 'error', message: error.message })
-    } else {
-      setAttendance(data)
-      setToast({ type: 'success', message: 'Successfully signed out. Have a great evening!' })
+      setActionLoading(false)
+      if (error) {
+        setToast({ type: 'error', message: error.message })
+      } else {
+        setAttendance(data)
+        setToast({ type: 'success', message: 'Successfully signed out. Have a great evening!' })
+      }
     }
   }
 
@@ -156,8 +173,15 @@ export default function TeacherClockIn() {
         </p>
 
         <div className="mt-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold">
-          {!hasCheckedIn && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Not Checked In Yet</span>}
-          {hasCheckedIn && !hasSignedOut && <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">Currently on Campus (Checked In)</span>}
+          {!hasCheckedIn && timeInMinutes > LATE_END && (
+            <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">Marked Absent (Missed Check-In Window)</span>
+          )}
+          {!hasCheckedIn && timeInMinutes <= LATE_END && (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Not Checked In Yet</span>
+          )}
+          {hasCheckedIn && !hasSignedOut && (
+            <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">Status: {attendance.status} (Checked In)</span>
+          )}
           {hasSignedOut && <span className="rounded-full bg-royal-100 px-3 py-1 text-royal-800">Day Completed (Signed Out)</span>}
         </div>
 
@@ -177,26 +201,52 @@ export default function TeacherClockIn() {
         </div>
 
         <div className="mt-8 space-y-3">
-          {!hasCheckedIn && (
+          {/* MORNING CHECK-IN */}
+          {!hasCheckedIn && isMorningCheckInActive && (
             <button
-              onClick={() => setShowScanner(true)}
+              onClick={() => {
+                setScanMode('check-in')
+                setShowScanner(true)
+              }}
               disabled={actionLoading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white shadow transition hover:bg-green-700 disabled:opacity-60"
             >
               <QrCode className="h-5 w-5" />
-              {actionLoading ? 'Processing...' : 'Scan Campus QR Code to Check In'}
+              {actionLoading ? 'Processing...' : timeInMinutes <= PRESENT_END ? 'Scan QR Code to Check In (Present)' : 'Scan QR Code to Check In (Late)'}
             </button>
           )}
 
-          {hasCheckedIn && !hasSignedOut && (
+          {!hasCheckedIn && !isMorningCheckInActive && timeInMinutes > LATE_END && timeInMinutes < SIGN_OUT_START && (
+            <div className="rounded-xl bg-red-50 py-3 text-center text-xs font-semibold text-red-700 border border-red-100">
+              Check-in window closed at 9:15 AM. You have been marked absent for today.
+            </div>
+          )}
+
+          {!hasCheckedIn && timeInMinutes < CHECK_IN_START && (
+            <div className="rounded-xl bg-gray-50 py-3 text-center text-xs font-medium text-gray-500 border border-gray-100">
+              Check-in opens at 6:00 AM.
+            </div>
+          )}
+
+          {/* AFTERNOON SIGN-OUT */}
+          {hasCheckedIn && !hasSignedOut && isAfternoonSignOutActive && (
             <button
-              onClick={handleSignOut}
+              onClick={() => {
+                setScanMode('sign-out')
+                setShowScanner(true)
+              }}
               disabled={actionLoading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-royal-600 py-3 text-sm font-semibold text-white shadow transition hover:bg-royal-700 disabled:opacity-60"
             >
-              <LogOut className="h-5 w-5" />
-              {actionLoading ? 'Recording...' : 'Sign Out of Campus'}
+              <QrCode className="h-5 w-5" />
+              {actionLoading ? 'Processing...' : 'Scan QR Code to Sign Out'}
             </button>
+          )}
+
+          {hasCheckedIn && !hasSignedOut && !isAfternoonSignOutActive && timeInMinutes < SIGN_OUT_START && (
+            <div className="rounded-xl bg-gray-50 py-3 text-center text-xs font-medium text-gray-500 border border-gray-100">
+              Checked in successfully! Sign-out QR scanner will be active from 3:00 PM to 6:00 PM.
+            </div>
           )}
 
           {hasSignedOut && (
@@ -212,7 +262,7 @@ export default function TeacherClockIn() {
           <div className="relative w-full max-w-sm rounded-2xl bg-white p-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="flex items-center gap-2 text-sm font-bold text-royal-900">
-                <QrCode className="h-4 w-4 text-royal-600" /> Scan Campus QR Code
+                <QrCode className="h-4 w-4 text-royal-600" /> {scanMode === 'check-in' ? 'Campus Check-In' : 'Campus Sign-Out'}
               </h3>
               <button
                 onClick={() => setShowScanner(false)}
@@ -231,7 +281,7 @@ export default function TeacherClockIn() {
             </div>
 
             <p className="mt-3 text-center text-xs text-gray-500">
-              Point your camera at the official attendance QR code displayed at the school administration or common room.
+              Scan the official campus QR code to complete your {scanMode === 'check-in' ? 'check-in' : 'sign-out'}.
             </p>
           </div>
         </div>

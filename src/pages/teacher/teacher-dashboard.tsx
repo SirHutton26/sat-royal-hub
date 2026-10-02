@@ -91,31 +91,109 @@ function HeroAvatar({ url, initials }: { url: string | null; initials: string })
 function StatCard({
   label,
   value,
+  sub,
   icon,
   loading,
   accentSolid,
 }: {
   label: string
   value: string | number
+  sub?: string
   icon: React.ReactNode
   loading: boolean
   accentSolid: string
 }) {
+  // Long values (like class names) wrap onto two lines at a slightly smaller size instead of being cut off
+  const isLong = String(value).length > 10
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-center gap-3">
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white ${accentSolid}`}>
           {icon}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-gray-500">{label}</p>
           {loading ? (
             <div className="mt-1 h-6 w-14 animate-pulse rounded bg-gray-200" />
           ) : (
-            <p className="truncate text-xl font-bold text-royal-900">{value}</p>
+            <>
+              <p
+                className={`break-words font-bold leading-tight text-royal-900 ${
+                  isLong ? 'text-base' : 'text-xl'
+                }`}
+              >
+                {value}
+              </p>
+              {sub && <p className="mt-0.5 text-xs font-medium text-gray-400">{sub}</p>}
+            </>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ClassMakeupCard({
+  boys,
+  girls,
+  total,
+  loading,
+}: {
+  boys: number
+  girls: number
+  total: number
+  loading: boolean
+}) {
+  const boysPct = total ? (boys / total) * 100 : 0
+  const girlsPct = total ? (girls / total) * 100 : 0
+
+  return (
+    <div className="col-span-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-center justify-between text-sm">
+        <p className="font-semibold text-royal-900">Class makeup</p>
+        {!loading && <p className="text-xs text-gray-500">{total} {total === 1 ? 'student' : 'students'}</p>}
+      </div>
+
+      {loading ? (
+        <div className="mt-3 space-y-3">
+          <div className="h-11 animate-pulse rounded-xl bg-gray-100" />
+          <div className="h-3 animate-pulse rounded-full bg-gray-100" />
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-600 text-white">
+                <Mars className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">Boys</p>
+                <p className="text-xl font-bold leading-tight text-royal-900">
+                  {boys} <span className="text-xs font-medium text-gray-400">{Math.round(boysPct)}%</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-pink-500 text-white">
+                <Venus className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">Girls</p>
+                <p className="text-xl font-bold leading-tight text-royal-900">
+                  {girls} <span className="text-xs font-medium text-gray-400">{Math.round(girlsPct)}%</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full bg-sky-600 transition-all" style={{ width: `${boysPct}%` }} />
+            <div className="h-full bg-pink-500 transition-all" style={{ width: `${girlsPct}%` }} />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -238,8 +316,6 @@ export default function TeacherDashboard() {
   const now = new Date()
   const firstName = (profile?.full_name || profile?.email || '').split(' ')[0]
   const dateText = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const boysPct = studentCount ? (boys / studentCount) * 100 : 0
-  const girlsPct = studentCount ? (girls / studentCount) * 100 : 0
 
   const isClassTeacher = !!className
   const isSubjectTeacher = subjects.length > 0
@@ -292,37 +368,24 @@ export default function TeacherDashboard() {
 
       {/* Class teacher stats */}
       {isClassTeacher && (
-        <>
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard label="My class" value={className || ''} loading={loading} accentSolid={level.solid} icon={<GraduationCap className="h-5 w-5" />} />
-            <StatCard label="Students" value={studentCount} loading={loading} accentSolid="bg-royal-600" icon={<Users className="h-5 w-5" />} />
-            <StatCard label="Boys" value={boys} loading={loading} accentSolid="bg-sky-600" icon={<Mars className="h-5 w-5" />} />
-            <StatCard label="Girls" value={girls} loading={loading} accentSolid="bg-pink-500" icon={<Venus className="h-5 w-5" />} />
-          </div>
-
-          {!loading && studentCount > 0 && (
-            <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between text-sm">
-                <p className="font-semibold text-royal-900">Class makeup</p>
-                <p className="text-xs text-gray-500">{studentCount} students</p>
-              </div>
-              <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-gray-100">
-                <div className="h-full bg-sky-600 transition-all" style={{ width: `${boysPct}%` }} />
-                <div className="h-full bg-pink-500 transition-all" style={{ width: `${girlsPct}%` }} />
-              </div>
-              <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-sky-600" />
-                  Boys {Math.round(boysPct)}%
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-pink-500" />
-                  Girls {Math.round(girlsPct)}%
-                </span>
-              </div>
-            </div>
-          )}
-        </>
+        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard
+            label="My class"
+            value={className || ''}
+            sub={level.label || undefined}
+            loading={loading}
+            accentSolid={level.solid}
+            icon={<GraduationCap className="h-5 w-5" />}
+          />
+          <StatCard
+            label="Students"
+            value={studentCount}
+            loading={loading}
+            accentSolid="bg-royal-600"
+            icon={<Users className="h-5 w-5" />}
+          />
+          <ClassMakeupCard boys={boys} girls={girls} total={studentCount} loading={loading} />
+        </div>
       )}
 
       {/* Subject-only teacher stats */}
