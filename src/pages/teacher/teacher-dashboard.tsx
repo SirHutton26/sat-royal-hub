@@ -411,13 +411,17 @@ export default function TeacherDashboard() {
             More on SAT ROYAL HUB
           </h2>
           <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-gray-400">
-              <Award className="h-6 w-6" />
-              <p className="text-sm font-medium">Master Result</p>
-              <span className="rounded-full bg-royal-50 px-2 py-0.5 text-[10px] font-semibold text-royal-500">
-                Coming soon
-              </span>
-            </div>
+            <Link
+  to="/teacher/master-result"
+  className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md"
+>
+  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-royal-50 text-royal-600 transition-colors group-hover:bg-royal-600 group-hover:text-white">
+    <Award className="h-5 w-5" />
+  </div>
+  <p className="mt-3 text-sm font-semibold text-royal-900">Master Result</p>
+  <p className="mt-0.5 text-xs text-gray-500">All subjects, totals and positions</p>
+  <ChevronRight className="absolute right-3 top-4 h-4 w-4 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-royal-500" />
+</Link>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { RequireRole } from '@/features/auth/RequireRole'
 import LoginPage from '@/pages/LoginPage'
+import TeacherMasterResult from './pages/teacher/TeacherMasterResult'
 
 const AdminLayout = lazy(() => import('@/pages/admin/admin-layout'))
 const AdminDashboard = lazy(() => import('@/pages/admin/admin-dashboard'))
@@ -70,6 +71,7 @@ export default function App() {
               <Route path="score-bank" element={<TeacherScoreBank />} />
               <Route path="sba" element={<TeacherSba />} /> 
               <Route path="sba/print" element={<TeacherSbaPrint />} />
+              <Route path="/teacher/master-result" element={<TeacherMasterResult />} />
               </Route>
             </Route>
 

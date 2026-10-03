@@ -10,12 +10,22 @@ import {
   RefreshCw,
   BookOpen,
   ChevronRight,
+  Trash2,
+  Info,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
 
 const TERMS = ['Term 1', 'Term 2', 'Term 3']
+
+// Only this exam type is combined with the 4 Score Bank tasks.
+// Every other exam type (Mid Term, Mock, Promotional) uses the exam score alone.
+const TASK_EXAM_TYPE = 'End of Term Exam'
+
+function isTaskExam(examType: string | null | undefined) {
+  return examType === TASK_EXAM_TYPE
+}
 
 interface TeachingContext {
   classId: string
@@ -40,6 +50,12 @@ interface Student {
   admission_number: string
 }
 
+interface TaskScoreRow {
+  entry_id: string
+  student_id: string
+  score: number
+}
+
 interface ResultRow {
   studentId: string
   name: string
@@ -60,6 +76,7 @@ interface SavedSba {
   className: string
   subject: string
   term: string
+  examType: string | null
 }
 
 type View = 'pick-context' | 'configure' | 'results'
@@ -105,6 +122,12 @@ function computePositions(results: ResultRow[]): Map<string, number> {
     positionMap.set(r.studentId, lastPosition)
   })
   return positionMap
+}
+
+async function fetchTaskScores(entryIds: string[]): Promise<TaskScoreRow[]> {
+  if (entryIds.length === 0) return []
+  const { data } = await supabase.from('score_bank_scores').select('entry_id, student_id, score').in('entry_id', entryIds)
+  return (data ?? []) as TaskScoreRow[]
 }
 
 function SavingOverlay({ text }: { text: string }) {
@@ -153,6 +176,7 @@ export default function TeacherSba() {
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([])
   const [examOptions, setExamOptions] = useState<ExamSessionOption[]>([])
   const [examSessionId, setExamSessionId] = useState('')
+  const [savedExamId, setSavedExamId] = useState('') // exam of the SBA already saved for this class/subject/term
   const [configuring, setConfiguring] = useState(false)
 
   const [results, setResults] = useState<ResultRow[]>([])
@@ -162,20 +186,37 @@ export default function TeacherSba() {
   const [opening, setOpening] = useState(false)
   const [fromSaved, setFromSaved] = useState(false)
 
+  const [cardToDelete, setCardToDelete] = useState<SavedSba | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // The exam type decides how the SBA is built
+  const selectedExamType = examOptions.find((o) => o.id === examSessionId)?.exam_type ?? null
+  const needsTasks = isTaskExam(selectedExamType)
+
   async function loadSaved(list: (TeachingContext & { levelGroup: string | null })[]) {
     if (!profile) return
     const { data } = await supabase
       .from('sba_configs')
-      .select('class_id, subject, term')
+      .select('class_id, subject, term, exam_session_id')
       .eq('teacher_id', profile.id)
 
+    const rows = (data as { class_id: string; subject: string; term: string; exam_session_id: string | null }[]) ?? []
+
+    const examIds = Array.from(new Set(rows.map((r) => r.exam_session_id).filter((id): id is string => !!id)))
+    const typeMap = new Map<string, string>()
+    if (examIds.length > 0) {
+      const { data: sess } = await supabase.from('exam_sessions').select('id, exam_type').in('id', examIds)
+      for (const s of sess ?? []) typeMap.set(s.id, s.exam_type)
+    }
+
     const classNames = new Map(list.map((c) => [c.classId, c.className]))
-    const cards: SavedSba[] = ((data as { class_id: string; subject: string; term: string }[]) ?? []).map((r) => ({
+    const cards: SavedSba[] = rows.map((r) => ({
       key: `${r.class_id}|${r.subject}|${r.term}`,
       classId: r.class_id,
       className: classNames.get(r.class_id) ?? '',
       subject: r.subject,
       term: r.term,
+      examType: r.exam_session_id ? typeMap.get(r.exam_session_id) ?? null : null,
     }))
 
     cards.sort(
@@ -251,11 +292,13 @@ export default function TeacherSba() {
 
     const groupKey = toExamGroupKey(activeContext?.levelGroup ?? null)
     if (groupKey) {
+      // Only exams open to this class: either every class in the level (class_ids is null) or this class is on the list
       const { data: sessions } = await supabase
         .from('exam_sessions')
         .select('id, exam_type')
         .eq('group_key', groupKey)
         .eq('term', term)
+        .or(`class_ids.is.null,class_ids.cs.{${classId}}`)
         .order('start_date', { ascending: false })
       setExamOptions(sessions ?? [])
     } else {
@@ -265,9 +308,11 @@ export default function TeacherSba() {
     if (existingConfigRes.data) {
       setSelectedEntryIds(existingConfigRes.data.entry_ids ?? [])
       setExamSessionId(existingConfigRes.data.exam_session_id ?? '')
+      setSavedExamId(existingConfigRes.data.exam_session_id ?? '')
     } else {
       setSelectedEntryIds([])
       setExamSessionId('')
+      setSavedExamId('')
     }
 
     setView('configure')
@@ -315,9 +360,25 @@ export default function TeacherSba() {
     const entryIds: string[] = cfgRes.data?.entry_ids ?? []
     const examId: string = cfgRes.data?.exam_session_id ?? ''
 
+    // Find out which exam type this SBA uses so the screen and any recompute follow the right rule
+    let examType: string | null = null
+    if (examId) {
+      const { data: sess } = await supabase.from('exam_sessions').select('id, exam_type').eq('id', examId).maybeSingle()
+      if (sess) {
+        setExamOptions([sess])
+        examType = sess.exam_type
+      } else {
+        setExamOptions([])
+      }
+    } else {
+      setExamOptions([])
+    }
+    const useTasks = isTaskExam(examType)
+
     setEntries(entryList)
     setSelectedEntryIds(entryIds)
     setExamSessionId(examId)
+    setSavedExamId(examId)
 
     const savedRows = savedRes.data ?? []
 
@@ -341,9 +402,9 @@ export default function TeacherSba() {
       })
       setResults(merged)
       setHasSaved(true)
-    } else if (entryIds.length === 4 && examId) {
+    } else if (examId && (!useTasks || entryIds.length === 4)) {
       // Config exists but results were never saved: compute them once
-      await computeResults(entryIds, examId, entryList)
+      await computeResults(useTasks ? entryIds : [], examId, entryList, useTasks, card.classId, card.subject)
       setHasSaved(false)
     } else {
       setResults([])
@@ -364,19 +425,22 @@ export default function TeacherSba() {
 
   async function saveConfigAndCompute() {
     if (!profile) return
-    if (selectedEntryIds.length !== 4) {
-      setToast({ type: 'error', message: 'Select exactly 4 score bank entries.' })
-      return
-    }
     if (!examSessionId) {
       setToast({ type: 'error', message: 'Choose which exam to use.' })
+      return
+    }
+    if (needsTasks && selectedEntryIds.length !== 4) {
+      setToast({ type: 'error', message: 'Select exactly 4 score bank entries.' })
       return
     }
 
     setConfiguring(true)
 
+    // Exams other than End of Term don't use Score Bank entries at all
+    const entryIds = needsTasks ? selectedEntryIds : []
+
     const { error } = await supabase.from('sba_configs').upsert(
-      { class_id: classId, subject, term, entry_ids: selectedEntryIds, exam_session_id: examSessionId, teacher_id: profile.id },
+      { class_id: classId, subject, term, entry_ids: entryIds, exam_session_id: examSessionId, teacher_id: profile.id },
       { onConflict: 'class_id,subject,term' }
     )
 
@@ -386,35 +450,58 @@ export default function TeacherSba() {
       return
     }
 
-    await computeResults(selectedEntryIds, examSessionId, entries)
+    setSelectedEntryIds(entryIds)
+    setSavedExamId(examSessionId)
+    await computeResults(entryIds, examSessionId, entries, needsTasks, classId, subject)
     await loadSaved(contexts)
     setConfiguring(false)
     setView('results')
   }
 
-  async function computeResults(entryIds: string[], examId: string, entryList: ScoreBankEntry[]) {
+  async function computeResults(
+    entryIds: string[],
+    examId: string,
+    entryList: ScoreBankEntry[],
+    useTasks: boolean,
+    forClassId: string,
+    forSubject: string
+  ) {
     setComputing(true)
-    const [studentsRes, scoresRes, examScoresRes] = await Promise.all([
-      supabase.from('students').select('id, full_name, admission_number').eq('class_id', classId).eq('is_active', true).order('full_name'),
-      supabase.from('score_bank_scores').select('entry_id, student_id, score').in('entry_id', entryIds),
-      supabase.from('exam_scores').select('student_id, score').eq('exam_session_id', examId).eq('class_id', classId).eq('subject', subject),
+    const [studentsRes, taskScores, examScoresRes] = await Promise.all([
+      supabase.from('students').select('id, full_name, admission_number').eq('class_id', forClassId).eq('is_active', true).order('full_name'),
+      fetchTaskScores(useTasks ? entryIds : []),
+      supabase.from('exam_scores').select('student_id, score').eq('exam_session_id', examId).eq('class_id', forClassId).eq('subject', forSubject),
     ])
 
     const studentList: Student[] = studentsRes.data ?? []
-    const maxTotal = entryList.filter((e) => entryIds.includes(e.id)).reduce((sum, e) => sum + Number(e.total_score), 0)
+    const maxTotal = useTasks
+      ? entryList.filter((e) => entryIds.includes(e.id)).reduce((sum, e) => sum + Number(e.total_score), 0)
+      : null
     const examMap = new Map((examScoresRes.data ?? []).map((r) => [r.student_id, Number(r.score)]))
 
     const computed: ResultRow[] = studentList.map((s) => {
-      const studentEntryScores = (scoresRes.data ?? []).filter((r) => r.student_id === s.id && entryIds.includes(r.entry_id))
-      const hasAllTasks = studentEntryScores.length === 4
-      const taskScore = hasAllTasks ? studentEntryScores.reduce((sum, r) => sum + Number(r.score), 0) : null
-
-      // Explicit two-step conversion, as requested: raw → scale to /60 → then 50% weight
-      const scaledTo60 = taskScore !== null ? scaleRawTo60(taskScore, maxTotal) : null
-      const componentA = scaledTo60 !== null ? sixtyScaleToComponentA(scaledTo60) : null
-
       const examScore = examMap.has(s.id) ? examMap.get(s.id)! : null
-      const componentB = examScore !== null ? (examScore / 100) * 50 : null
+
+      let taskScore: number | null = null
+      let componentA: number | null
+      let componentB: number | null
+
+      if (useTasks) {
+        // End of Term: 4 Score Bank tasks (50) + exam (50)
+        const studentEntryScores = taskScores.filter((r) => r.student_id === s.id && entryIds.includes(r.entry_id))
+        const hasAllTasks = studentEntryScores.length === 4
+        taskScore = hasAllTasks ? studentEntryScores.reduce((sum, r) => sum + Number(r.score), 0) : null
+
+        // Explicit two-step conversion, as requested: raw → scale to /60 → then 50% weight
+        const scaledTo60 = taskScore !== null && maxTotal !== null ? scaleRawTo60(taskScore, maxTotal) : null
+        componentA = scaledTo60 !== null ? sixtyScaleToComponentA(scaledTo60) : null
+        componentB = examScore !== null ? (examScore / 100) * 50 : null
+      } else {
+        // Mid Term, Mock, Promotional: the exam score alone, split in two equal halves
+        componentA = examScore !== null ? examScore / 2 : null
+        componentB = examScore !== null ? examScore / 2 : null
+      }
+
       const total = componentA !== null && componentB !== null ? componentA + componentB : null
       const grade = total !== null ? gradeFor(total).grade : null
 
@@ -442,11 +529,11 @@ export default function TeacherSba() {
 
   // Recalculate from the latest Score Bank and exam scores
   async function recompute() {
-    if (selectedEntryIds.length !== 4 || !examSessionId) {
+    if (!examSessionId || (needsTasks && selectedEntryIds.length !== 4)) {
       setToast({ type: 'error', message: 'This SBA has no complete setup yet. Go back and configure it.' })
       return
     }
-    await computeResults(selectedEntryIds, examSessionId, entries)
+    await computeResults(needsTasks ? selectedEntryIds : [], examSessionId, entries, needsTasks, classId, subject)
     setHasSaved(false)
     setToast({ type: 'success', message: 'Results recomputed. Save to keep the changes.' })
   }
@@ -483,6 +570,44 @@ export default function TeacherSba() {
       setToast({ type: 'success', message: 'SBA results saved!' })
       setHasSaved(true)
     }
+  }
+
+  async function confirmDeleteSba() {
+    if (!cardToDelete) return
+    setDeleting(true)
+
+    // Saved results first, then the setup (Score Bank entries and exam scores are never touched)
+    const { error: resultsError } = await supabase
+      .from('sba_results')
+      .delete()
+      .eq('class_id', cardToDelete.classId)
+      .eq('subject', cardToDelete.subject)
+      .eq('term', cardToDelete.term)
+
+    if (resultsError) {
+      setDeleting(false)
+      setToast({ type: 'error', message: resultsError.message })
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('sba_configs')
+      .delete()
+      .eq('class_id', cardToDelete.classId)
+      .eq('subject', cardToDelete.subject)
+      .eq('term', cardToDelete.term)
+      .select('class_id')
+
+    setDeleting(false)
+
+    if (error || !data || data.length === 0) {
+      setToast({ type: 'error', message: error?.message ?? 'Could not delete this SBA. Check your permissions.' })
+      return
+    }
+
+    setSavedSbas((prev) => prev.filter((c) => c.key !== cardToDelete.key))
+    setCardToDelete(null)
+    setToast({ type: 'success', message: 'SBA deleted.' })
   }
 
   function goToPreview() {
@@ -574,25 +699,68 @@ export default function TeacherSba() {
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {savedSbas.map((card) => (
-              <button
+              <div
                 key={card.key}
-                onClick={() => openSaved(card)}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md"
+                className="flex items-center gap-1 rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-royal-50 text-royal-600">
-                    <BookOpen className="h-5 w-5" />
+                <button
+                  onClick={() => openSaved(card)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-3 p-5 text-left"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-royal-50 text-royal-600">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-royal-900">{card.subject}</p>
+                      <p className="truncate text-xs text-gray-500">
+                        {card.className} · {card.term}
+                      </p>
+                      {card.examType && <p className="truncate text-xs text-gray-400">{card.examType}</p>}
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-royal-900">{card.subject}</p>
-                    <p className="truncate text-xs text-gray-500">
-                      {card.className} · {card.term}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
-              </button>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                </button>
+                <button
+                  onClick={() => setCardToDelete(card)}
+                  aria-label={`Delete ${card.subject} SBA`}
+                  className="mr-3 shrink-0 rounded-md p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             ))}
+          </div>
+        )}
+
+        {cardToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-royal-900/40 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="mt-3 font-semibold text-royal-900">Delete this SBA?</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                The saved SBA for {cardToDelete.subject} · {cardToDelete.className} · {cardToDelete.term} will be removed, including
+                its results in the Master Result. Your Score Bank entries and exam scores are not affected. This can't be undone.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  onClick={() => setCardToDelete(null)}
+                  disabled={deleting}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteSba}
+                  disabled={deleting}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -603,6 +771,9 @@ export default function TeacherSba() {
   }
 
   if (view === 'configure') {
+    const existingExamType = examOptions.find((o) => o.id === savedExamId)?.exam_type ?? null
+    const replacesOther = !!savedExamId && !!examSessionId && savedExamId !== examSessionId
+
     return (
       <div>
         <button onClick={() => setView('pick-context')} className="flex items-center gap-1 text-sm text-royal-600 hover:underline">
@@ -613,38 +784,11 @@ export default function TeacherSba() {
         </h1>
 
         <div className="mt-4 max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-royal-900">Pick exactly 4 Score Bank entries</p>
-          {entries.length === 0 ? (
-            <p className="mt-2 text-sm text-gray-400">
-              No Score Bank entries yet for this subject and term. Add some in Score Bank first.
-            </p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {entries.map((e) => {
-                const checked = selectedEntryIds.includes(e.id)
-                return (
-                  <label
-                    key={e.id}
-                    className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
-                      checked ? 'border-royal-400 bg-royal-50' : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <input type="checkbox" checked={checked} onChange={() => toggleEntry(e.id)} className="h-4 w-4" />
-                      {e.title}
-                    </span>
-                    <span className="text-xs text-gray-400">/{e.total_score}</span>
-                  </label>
-                )
-              })}
-            </div>
-          )}
-          <p className="mt-2 text-xs text-gray-400">{selectedEntryIds.length}/4 selected</p>
-
-          <div className="mt-4 border-t border-gray-100 pt-4">
+          {/* Step 1: the exam decides everything else */}
+          <div>
             <label className="block text-sm font-medium text-royal-900">Exam to use</label>
             {examOptions.length === 0 ? (
-              <p className="mt-1 text-xs text-red-500">No exams activated for this level and term yet.</p>
+              <p className="mt-1 text-xs text-red-500">No exams activated for this class and term yet.</p>
             ) : (
               <select
                 value={examSessionId}
@@ -661,9 +805,65 @@ export default function TeacherSba() {
             )}
           </div>
 
+          {replacesOther && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                An SBA for this subject and term already exists{existingExamType ? ` using ${existingExamType}` : ''}. Computing with
+                this exam will replace it.
+              </p>
+            </div>
+          )}
+
+          {/* Step 2: depends on the exam type */}
+          {!examSessionId ? (
+            <p className="mt-4 text-sm text-gray-400">Choose an exam to continue.</p>
+          ) : needsTasks ? (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-royal-900">Pick exactly 4 Score Bank entries</p>
+              {entries.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-400">
+                  No Score Bank entries yet for this subject and term. Add some in Score Bank first.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {entries.map((e) => {
+                    const checked = selectedEntryIds.includes(e.id)
+                    return (
+                      <label
+                        key={e.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
+                          checked ? 'border-royal-400 bg-royal-50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input type="checkbox" checked={checked} onChange={() => toggleEntry(e.id)} className="h-4 w-4" />
+                          {e.title}
+                        </span>
+                        <span className="text-xs text-gray-400">/{e.total_score}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              <p className="mt-2 text-xs text-gray-400">{selectedEntryIds.length}/4 selected</p>
+            </div>
+          ) : (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-royal-100 bg-royal-50 p-3 text-xs text-royal-800">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-royal-500" />
+              <div>
+                <p className="font-semibold">{selectedExamType} doesn't use Score Bank tasks.</p>
+                <p className="mt-1">
+                  Only the exam score is used. It is split into two equal halves: one half is Sub-Total A and the other half is Exam B.
+                  For example, an exam score of 72 gives Sub-Total A = 36 and Exam B = 36.
+                </p>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={saveConfigAndCompute}
-            disabled={configuring}
+            disabled={configuring || !examSessionId}
             className="mt-4 w-full rounded-md bg-royal-600 py-2 text-sm font-semibold text-white transition hover:bg-royal-700 disabled:opacity-60"
           >
             {configuring ? 'Computing...' : 'Compute results'}
@@ -688,6 +888,12 @@ export default function TeacherSba() {
       <h1 className="mt-2 text-xl font-semibold text-royal-900">
         {subject} SBA · {activeContext?.className} · {term}
       </h1>
+      {selectedExamType && (
+        <p className="mt-0.5 text-sm text-gray-500">
+          {selectedExamType}
+          {!needsTasks && ' · exam score only'}
+        </p>
+      )}
 
       <div className="mt-4 overflow-x-auto rounded-xl bg-white shadow-sm">
         <table className="w-full text-left text-sm">
@@ -721,7 +927,11 @@ export default function TeacherSba() {
                   <td className="px-4 py-3 text-gray-500">{i + 1}</td>
                   <td className="px-4 py-3 font-medium text-royal-900">{r.name}</td>
                   <td className="px-4 py-3 text-gray-600">
-                    {r.componentA !== null ? r.componentA.toFixed(1) : <span className="text-gray-300">Incomplete</span>}
+                    {r.componentA !== null ? (
+                      r.componentA.toFixed(1)
+                    ) : (
+                      <span className="text-gray-300">{needsTasks ? 'Incomplete' : 'No exam score'}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {r.componentB !== null ? r.componentB.toFixed(1) : <span className="text-gray-300">No exam score</span>}
