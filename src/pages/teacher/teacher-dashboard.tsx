@@ -15,6 +15,7 @@ import {
   Award,
   BookOpen,
   Sparkles,
+  Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -246,9 +247,103 @@ function SubjectsPanel({ subjects, accentSolid }: { subjects: SubjectRow[]; acce
   )
 }
 
+const feesMoney = (n: number) =>
+  'GH₵ ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+function feesDefaultYear() {
+  const d = new Date()
+  const start = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1
+  return `${start}/${start + 1}`
+}
+
+/** Class teacher only: how many students in the class owe fees this term */
+function FeesCard({ classId }: { classId: string }) {
+  const [state, setState] = useState<{ loading: boolean; owing: number; total: number; ok: boolean }>({
+    loading: true,
+    owing: 0,
+    total: 0,
+    ok: true,
+  })
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      const { data: settings } = await supabase
+        .from('school_settings')
+        .select('current_academic_year, current_term')
+        .limit(1)
+        .maybeSingle()
+      const year = settings?.current_academic_year || feesDefaultYear()
+      const term = settings?.current_term || 'Term 1'
+
+      const { data, error } = await supabase.rpc('class_fee_balances', {
+        p_class_id: classId,
+        p_year: year,
+        p_term: term,
+      })
+      if (!active) return
+      if (error) {
+        setState({ loading: false, owing: 0, total: 0, ok: false })
+        return
+      }
+      const rows = (data ?? []) as { total_owing: number | string }[]
+      const owingRows = rows.filter((r) => Number(r.total_owing) > 0)
+      setState({
+        loading: false,
+        owing: owingRows.length,
+        total: owingRows.reduce((sum, r) => sum + Number(r.total_owing), 0),
+        ok: true,
+      })
+    }
+    void load()
+    return () => {
+      active = false
+    }
+  }, [classId])
+
+  return (
+    <Link
+      to="/teacher/fees"
+      className="group relative mt-6 block overflow-hidden rounded-2xl bg-gradient-to-r from-royal-900 via-royal-700 to-royal-600 p-5 text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gold-400/25 blur-2xl" />
+      <div className="relative flex items-center gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gold-400 text-royal-900">
+          <Wallet className="h-6 w-6" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-royal-100">Fees</p>
+          {state.loading ? (
+            <div className="mt-2 h-6 w-40 animate-pulse rounded bg-white/20" />
+          ) : state.ok ? (
+            <>
+              <p className="mt-1 text-lg font-bold">
+                {state.owing === 0 ? (
+                  'Nobody owes fees'
+                ) : (
+                  <>
+                    <span className="text-gold-400">{state.owing}</span> {state.owing === 1 ? 'student owes' : 'students owe'} fees
+                  </>
+                )}
+              </p>
+              <p className="text-xs text-royal-100">
+                {state.owing === 0 ? 'Your class is up to date this term.' : `${feesMoney(state.total)} outstanding. Tap to see who.`}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-royal-100">Tap to see which students in your class owe fees.</p>
+          )}
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-royal-200 transition-transform group-hover:translate-x-0.5" />
+      </div>
+    </Link>
+  )
+}
+
 export default function TeacherDashboard() {
   const { profile } = useAuth()
   const [className, setClassName] = useState<string | null>(null)
+  const [classId, setClassId] = useState<string | null>(null)
   const [levelGroup, setLevelGroup] = useState<string | null>(null)
   const [studentCount, setStudentCount] = useState(0)
   const [boys, setBoys] = useState(0)
@@ -279,6 +374,7 @@ export default function TeacherDashboard() {
       const myClass = classRes.data
       if (myClass) {
         setClassName(myClass.name)
+        setClassId(myClass.id)
         setLevelGroup(myClass.level_group)
         const { data: students } = await supabase
           .from('students')
@@ -387,6 +483,9 @@ export default function TeacherDashboard() {
           <ClassMakeupCard boys={boys} girls={girls} total={studentCount} loading={loading} />
         </div>
       )}
+
+      {/* Fees owed in the class (class teachers only) */}
+      {isClassTeacher && classId && <FeesCard classId={classId} />}
 
       {/* Subject-only teacher stats */}
       {!isClassTeacher && isSubjectTeacher && (

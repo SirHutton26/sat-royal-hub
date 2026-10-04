@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { QrCode, Printer, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { CAMPUS_QR_SECRET, lastWeekday, localISO } from '@/lib/attendance'
 import schoolLogo from '@/assets/school-logo.png'
 
 interface Teacher {
@@ -16,14 +17,10 @@ interface Record {
   status: string
 }
 
-const VALID_CAMPUS_QR_SECRET = 'SAT-ROYAL-CAMPUS-CHECKIN-2026'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
+const VALID_CAMPUS_QR_SECRET = CAMPUS_QR_SECRET
 
 export default function AdminStaffAttendance() {
-  const [date, setDate] = useState(todayISO())
+  const [date, setDate] = useState(lastWeekday())
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [records, setRecords] = useState<Record[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,7 +48,7 @@ export default function AdminStaffAttendance() {
   const byTeacher = new Map(records.map((r) => [r.teacher_id, r]))
   const presentCount = records.filter((r) => r.status === 'Checked In' || r.status === 'Signed Out' || r.status === 'Present').length
   const lateCount = records.filter((r) => r.status === 'Late').length
-  const missingCount = teachers.length - records.length
+  const missingCount = Math.max(0, teachers.length - records.length)
 
   const handlePrintQR = () => {
     const printWindow = window.open('', '_blank')
@@ -96,8 +93,13 @@ export default function AdminStaffAttendance() {
         <input
           type="date"
           value={date}
-          max={todayISO()}
-          onChange={(e) => setDate(e.target.value)}
+          max={localISO()}
+          onChange={(e) => {
+            const v = e.target.value
+            if (!v) return
+            // Attendance is only taken Monday to Friday; snap weekend picks back to Friday
+            setDate(lastWeekday(v))
+          }}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-royal-500 focus:ring-2 focus:ring-royal-100"
         />
       </div>
@@ -136,7 +138,7 @@ export default function AdminStaffAttendance() {
             </div>
             <div>
               <h2 className="text-base font-bold text-royal-900">Attendance Summary</h2>
-              <p className="mt-0.5 text-xs text-gray-500">{date === todayISO() ? "Today's live stats" : `Stats for ${date}`}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{date === localISO() ? "Today's live stats" : `Stats for ${date}`}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-right">

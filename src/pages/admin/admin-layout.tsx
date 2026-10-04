@@ -14,6 +14,8 @@ import {
   X,
   ChevronRight,
   Fingerprint,
+  Wallet,
+  UserCog,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -24,10 +26,12 @@ const navItems = [
   { label: 'Subjects', to: '/admin/subjects', icon: Library },
   { label: 'Students', to: '/admin/students', icon: GraduationCap },
   { label: 'Teachers', to: '/admin/teachers', icon: Users },
+  { label: 'Non-Staff', to: '/admin/non-staff', icon: UserCog },
   { label: 'Staff', to: '/admin/staff-attendance', icon: Fingerprint },
   { label: 'Exams', to: '/admin/exams', icon: CalendarClock },
   { label: 'Alerts', to: '/admin/alerts', icon: Megaphone },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
+  { label: 'Fees', to: '/admin/fees', icon: Wallet },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

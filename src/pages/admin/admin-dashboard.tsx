@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   AlertCircle,
   CalendarClock,
+  UserCog,
+  Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -23,11 +25,13 @@ import { useAuth } from '@/features/auth/AuthProvider'
 // ---- Edit these to match the routes you have built ----
 const ADMIN_ACTIONS = [
   { label: 'Teachers', desc: 'Manage teacher accounts', to: '/admin/teachers', icon: Users },
-  { label: 'Classes', desc: 'Classes and class teachers', to: '/admin/classes', icon: School },
+  { label: 'Classes', desc: 'Classes and class teachers', to: '/admin/class', icon: School },
   { label: 'Students', desc: 'Enrol and manage students', to: '/admin/students', icon: GraduationCap },
   { label: 'Subjects', desc: 'Subjects for each level', to: '/admin/subjects', icon: BookOpen },
   { label: 'Exams', desc: 'Activate exam windows', to: '/admin/exams', icon: FileText },
   { label: 'Alerts', desc: 'Send announcements', to: '/admin/alerts', icon: Bell },
+  { label: 'Non-Staff', desc: 'Bursar, headteacher and other staff', to: '/admin/non-staff', icon: UserCog },
+  { label: 'Fees', desc: 'Fee amounts and opening balances', to: '/admin/fees', icon: Wallet },
 ]
 const EXAMS_ROUTE = '/admin/exams'
 // --------------------------------------------------------
@@ -78,6 +82,9 @@ interface ExamRow {
   end_date: string
   is_active: boolean
   class_ids: string[] | null
+}
+interface NonStaffRow {
+  is_active: boolean
 }
 interface SubjectRow {
   name: string
@@ -239,6 +246,7 @@ export default function AdminDashboard() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [exams, setExams] = useState<ExamRow[]>([])
   const [subjects, setSubjects] = useState<SubjectRow[]>([])
+  const [nonStaff, setNonStaff] = useState<NonStaffRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadIssue, setLoadIssue] = useState(false)
 
@@ -249,7 +257,7 @@ export default function AdminDashboard() {
     let active = true
 
     async function load() {
-      const [p, c, s, a, e, sub] = await Promise.all([
+      const [p, c, s, a, e, sub, ns] = await Promise.all([
         supabase.from('profiles').select('id, full_name, email, role, is_active'),
         supabase.from('classes').select('id, name, level_group, teacher_id'),
         supabase.from('students').select('class_id, gender').eq('is_active', true),
@@ -259,6 +267,7 @@ export default function AdminDashboard() {
           .select('id, group_key, exam_type, term, start_date, end_date, is_active, class_ids')
           .eq('is_active', true),
         supabase.from('subjects').select('name, level_group'),
+        supabase.from('non_teaching_staff').select('is_active'),
       ])
 
       if (!active) return
@@ -270,6 +279,7 @@ export default function AdminDashboard() {
       setAssignments((a.data as AssignmentRow[]) ?? [])
       setExams((e.data as ExamRow[]) ?? [])
       setSubjects((sub.data as SubjectRow[]) ?? [])
+      setNonStaff((ns.data as NonStaffRow[]) ?? [])
       setLoading(false)
     }
 
@@ -389,6 +399,7 @@ export default function AdminDashboard() {
       activeTeachers: activeTeachers.length,
       inactiveTeachers: teachers.length - activeTeachers.length,
       totalAdmins: admins.length,
+      totalNonStaff: nonStaff.length,
       totalStudents: students.length,
       boys,
       girls,
@@ -397,7 +408,7 @@ export default function AdminDashboard() {
       attention,
       openExams,
     }
-  }, [profiles, classes, students, assignments, exams, subjects, configs])
+  }, [profiles, classes, students, assignments, exams, subjects, configs, nonStaff])
 
   const now = new Date()
   const firstName = (profile?.full_name || profile?.email || '').split(' ')[0]
@@ -438,11 +449,12 @@ export default function AdminDashboard() {
       )}
 
       {/* People */}
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Total teachers" value={view.totalTeachers} icon={Users} loading={loading} accent="bg-royal-50 text-royal-600" />
         <StatCard label="Active teachers" value={view.activeTeachers} icon={UserCheck} loading={loading} accent="bg-green-50 text-green-600" />
         <StatCard label="Inactive teachers" value={view.inactiveTeachers} icon={UserX} loading={loading} accent="bg-red-50 text-red-600" />
         <StatCard label="Admins" value={view.totalAdmins} icon={ShieldCheck} loading={loading} accent="bg-gold-400/20 text-gold-500" />
+        <StatCard label="Non-teaching staff" value={view.totalNonStaff} icon={UserCog} loading={loading} accent="bg-sky-50 text-sky-600" />
       </div>
 
       {/* School */}
@@ -455,7 +467,7 @@ export default function AdminDashboard() {
       {/* Quick actions */}
       <div className="mt-8">
         <h2 className="text-sm font-semibold text-royal-900">Quick actions</h2>
-        <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {ADMIN_ACTIONS.map((a) => (
             <Link
               key={a.label}

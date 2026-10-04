@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Search, GraduationCap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { localISO } from '@/lib/attendance'
 
 type Status = 'present' | 'absent' | 'late'
 
@@ -31,9 +32,7 @@ const STATUS_CELL: Record<Status, { letter: string; classes: string }> = {
   absent: { letter: 'A', classes: 'bg-red-100 text-red-700' },
 }
 
-function toISO(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
+const toISO = localISO
 
 function getMonday(d: Date): Date {
   const date = new Date(d)

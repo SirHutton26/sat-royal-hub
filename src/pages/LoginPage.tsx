@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Navigate } from 'react-router-dom'
+import { IDLE_NOTICE_KEY } from '@/components/auth/idle-logout'
 import { Mail, Lock, Eye, EyeOff, ShieldAlert, X } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -13,6 +14,13 @@ const loginSchema = z.object({
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
+
+/** Where each role lands after signing in */
+const HOME_BY_ROLE: Record<string, string> = {
+  admin: '/admin',
+  teacher: '/teacher',
+  bursar: '/bursar',
+}
 
 function BrandHeading() {
   return (
@@ -104,6 +112,21 @@ export default function LoginPage() {
   const [showForgot, setShowForgot] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // shown after an automatic sign-out for inactivity (cleared in the effect so StrictMode's double render keeps it)
+  const [idleNotice] = useState(() => {
+    try {
+      return localStorage.getItem(IDLE_NOTICE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.removeItem(IDLE_NOTICE_KEY)
+    } catch {
+      // ignore
+    }
+  }, [])
 
   const {
     register,
@@ -111,9 +134,13 @@ export default function LoginPage() {
     formState: { errors },
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) })
 
-  if (profile?.is_active) {
-    return <Navigate to={profile.role === 'admin' ? '/admin' : '/teacher'} replace />
+  // Send active users to their own dashboard. If the role has no home route,
+  // stay on this page (redirecting to /login from /login would loop forever).
+  const homePath = profile?.is_active ? HOME_BY_ROLE[profile.role] : undefined
+  if (homePath) {
+    return <Navigate to={homePath} replace />
   }
+  const unknownRole = !!profile?.is_active && !homePath
 
   async function onSubmit(values: LoginFormValues) {
     setBusy(true)
@@ -145,7 +172,7 @@ export default function LoginPage() {
         </div>
         <div className="mt-3 h-1 w-24 rounded bg-gold-400" />
         <p className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-royal-100">
-          Admin &amp; Teacher Portal
+          Staff Portal
         </p>
       </div>
 
@@ -221,6 +248,17 @@ export default function LoginPage() {
           </button>
         </div>
 
+        {unknownRole && (
+          <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+            Your account role isn&apos;t set up for this portal yet. Please contact the administrator.
+          </p>
+        )}
+
+        {idleNotice && !authError && (
+          <p className="mt-3 rounded-xl bg-gold-400/20 px-3 py-2 text-sm text-royal-900">
+            You were signed out after 5 minutes of inactivity. Please sign in again.
+          </p>
+        )}
         {authError && (
           <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{authError}</p>
         )}

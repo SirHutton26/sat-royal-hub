@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Check, X, Clock, Save, Search, CheckCircle2, AlertCircle, GraduationCap, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { WEEKEND_MESSAGE, isWeekday, localISO, parseISODate } from '@/lib/attendance'
 import schoolLogo from '@/assets/school-logo.png'
 
 type Status = 'present' | 'absent' | 'late'
@@ -35,12 +36,8 @@ const STATUS_META: Record<Status, { label: string; icon: typeof Check; badge: st
 }
 const STATUS_ORDER: Status[] = ['present', 'late', 'absent']
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function formatDateLabel(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return parseISODate(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function SavingOverlay() {
@@ -78,7 +75,7 @@ export default function TeacherMarkAttendance() {
   const [className, setClassName] = useState<string | null>(null)
   const [levelGroup, setLevelGroup] = useState<string | null>(null)
   const [students, setStudents] = useState<Student[]>([])
-  const today = todayISO()
+  const today = localISO()
 
   const [marks, setMarks] = useState<Record<string, Status>>({})
   const [loading, setLoading] = useState(true)
@@ -93,7 +90,8 @@ export default function TeacherMarkAttendance() {
   }, [])
 
   const hourFloat = now.getHours() + now.getMinutes() / 60
-  const markingOpen = hourFloat >= MARKING_START_HOUR && hourFloat < MARKING_END_HOUR
+  const schoolDay = isWeekday(now)
+  const markingOpen = schoolDay && hourFloat >= MARKING_START_HOUR && hourFloat < MARKING_END_HOUR
 
   useEffect(() => {
     let active = true
@@ -153,6 +151,10 @@ export default function TeacherMarkAttendance() {
 
   async function saveAttendance() {
     if (!classId || !profile) return
+    if (!isWeekday(new Date())) {
+      setToast({ type: 'error', message: WEEKEND_MESSAGE })
+      return
+    }
     setSaving(true)
 
     const rows = students
@@ -209,7 +211,9 @@ export default function TeacherMarkAttendance() {
             <p className="text-xs text-gray-500">
               {markingOpen
                 ? `Marking is open until ${MARKING_END_HOUR}:00 PM today.`
-                : `Marking opens ${MARKING_START_HOUR}:00 AM–${MARKING_END_HOUR}:00 PM daily.`}
+                : schoolDay
+                  ? `Marking opens ${MARKING_START_HOUR}:00 AM–${MARKING_END_HOUR}:00 PM, Monday to Friday.`
+                  : WEEKEND_MESSAGE}
             </p>
           </div>
 
@@ -220,7 +224,9 @@ export default function TeacherMarkAttendance() {
               </div>
               <p className="mt-3 text-sm font-semibold text-royal-900">Attendance marking is closed</p>
               <p className="mt-1 max-w-xs text-xs text-gray-500">
-                You can mark attendance between {MARKING_START_HOUR}:00 AM and {MARKING_END_HOUR}:00 PM. Come back during that window.
+                {schoolDay
+                  ? `You can mark attendance between ${MARKING_START_HOUR}:00 AM and ${MARKING_END_HOUR}:00 PM. Come back during that window.`
+                  : `${WEEKEND_MESSAGE} Marking opens again on Monday.`}
               </p>
               {markedCount > 0 && (
                 <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs">

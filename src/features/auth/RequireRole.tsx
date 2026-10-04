@@ -11,6 +11,13 @@ function Splash() {
 
 const ONBOARDING_PATH = '/teacher/onboarding'
 
+/** Where each role lands; used when someone opens a section that isn't theirs */
+const HOME_BY_ROLE: Record<Role, string> = {
+  admin: '/admin',
+  teacher: '/teacher',
+  bursar: '/bursar',
+}
+
 export function RequireRole({ role }: { role: Role }) {
   const { session, profile, loading } = useAuth()
   const location = useLocation()
@@ -18,9 +25,10 @@ export function RequireRole({ role }: { role: Role }) {
   if (loading) return <Splash />
   if (!session || !profile || !profile.is_active) return <Navigate to="/login" replace />
   if (profile.role !== role) {
-    return <Navigate to={profile.role === 'admin' ? '/admin' : '/teacher'} replace />
+    return <Navigate to={HOME_BY_ROLE[profile.role] ?? '/login'} replace />
   }
 
+  // Onboarding currently applies to teachers only
   const needsOnboarding = profile.role === 'teacher' && !profile.onboarding_completed
   if (needsOnboarding && location.pathname !== ONBOARDING_PATH) {
     return <Navigate to={ONBOARDING_PATH} replace />

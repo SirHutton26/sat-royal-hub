@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Calendar, History, GraduationCap, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { isWeekday, localISO } from '@/lib/attendance'
 
 const MARKING_START_HOUR = 7
 const MARKING_END_HOUR = 12
@@ -16,10 +17,6 @@ const LEVEL_META: Record<string, { label: string; solid: string; soft: string; t
   jhs: { label: 'JHS', solid: 'bg-violet-500', soft: 'bg-violet-50', text: 'text-violet-700' },
 }
 const DEFAULT_LEVEL = { label: '', solid: 'bg-royal-600', soft: 'bg-royal-50', text: 'text-royal-700' }
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export default function TeacherAttendance() {
   const { profile } = useAuth()
@@ -36,7 +33,7 @@ export default function TeacherAttendance() {
   }, [])
 
   const hourFloat = now.getHours() + now.getMinutes() / 60
-  const markingOpen = hourFloat >= MARKING_START_HOUR && hourFloat < MARKING_END_HOUR
+  const markingOpen = isWeekday(now) && hourFloat >= MARKING_START_HOUR && hourFloat < MARKING_END_HOUR
 
   useEffect(() => {
     let active = true
@@ -60,7 +57,7 @@ export default function TeacherAttendance() {
           .from('attendance')
           .select('id', { count: 'exact', head: true })
           .eq('class_id', myClass.id)
-          .eq('date', todayISO()),
+          .eq('date', localISO()),
       ])
       if (!active) return
       setStudentCount(total ?? 0)
