@@ -21,6 +21,13 @@ export interface OutboxRow {
   ts: number
   failed?: number
   error?: string
+  tempNo?: string
+}
+export interface ReceiptMapRow {
+  tempNo: string
+  receiptNo: string
+  userId: string
+  ts: number
 }
 export interface CredRow {
   email: string
@@ -36,8 +43,10 @@ export const db = new Dexie('sat-hub') as Dexie & {
   cache: EntityTable<CacheRow, 'key'>
   outbox: EntityTable<OutboxRow, 'id'>
   creds: EntityTable<CredRow, 'email'>
+  receipts: EntityTable<ReceiptMapRow, 'tempNo'>
 }
 db.version(1).stores({ cache: 'key, userId, url, ts', outbox: '++id, userId', creds: 'email' })
+db.version(2).stores({ cache: 'key, userId, url, ts', outbox: '++id, userId', creds: 'email', receipts: 'tempNo, userId' })
 
 // Which user's data the fetch layer may cache/serve (set by AuthProvider)
 let currentUser: string | null = null

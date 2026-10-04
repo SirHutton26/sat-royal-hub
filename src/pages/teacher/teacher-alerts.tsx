@@ -1,3 +1,4 @@
+import OfflineDownload from '@/components/offline/offline-download'
 import { useEffect, useMemo, useState } from 'react'
 import { Megaphone, Search, BellOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -69,6 +70,7 @@ export default function TeacherAlerts() {
     <div>
       <h1 className="text-xl font-semibold text-royal-900">Alerts</h1>
       <p className="mt-1 text-sm text-gray-500">School announcements from the admin.</p>
+      <OfflineDownload />
 
       {alerts.length > 0 && (
         <div className="relative mt-4 max-w-sm">

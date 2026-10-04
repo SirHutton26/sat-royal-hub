@@ -10,6 +10,7 @@ import {
   type Receipt,
 } from '@/components/fees/fee-utils'
 import ReceiptModal from '@/components/fees/receipt-modal'
+import ProvisionalReceipts from '@/components/offline/provisional-receipts'
 
 /* ---------- types ---------- */
 
@@ -186,6 +187,7 @@ export default function BursarReceipts() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-bold text-royal-900">Receipts</h1>
       <p className="mt-1 text-sm text-gray-500">Look up payments, reprint receipts and void mistakes.</p>
+      <ProvisionalReceipts />
 
       {/* Period + totals */}
       <div className="mt-5 flex flex-wrap gap-2">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CloudOff, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { OUTBOX_EVENT, pruneCache } from '@/lib/offline-db'
-import { clearFailed, flushOutbox, outboxCounts, warmTeacherCache } from '@/lib/offline-sync'
+import { clearFailed, flushOutbox, outboxCounts, warmBalances, warmTeacherCache } from '@/lib/offline-sync'
 
 export default function SyncManager() {
   const { session, profile, offline } = useAuth()
@@ -37,6 +37,7 @@ export default function SyncManager() {
     void refresh()
     void flushOutbox().then(() => {
       if (profile?.role === 'teacher') void warmTeacherCache(userId, profile.alerts_last_seen_at)
+      if (profile?.role === 'bursar' || profile?.role === 'admin') void warmBalances()
     })
     const t = setInterval(() => void flushOutbox(), 60000)
     return () => clearInterval(t)

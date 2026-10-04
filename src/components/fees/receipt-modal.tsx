@@ -22,7 +22,7 @@ export default function ReceiptModal({
   // Fires once per receipt, whether the bursar clicks Print or Done first.
   // The edge function looks up the guardian's number and builds the message itself.
   function notifyGuardian() {
-    if (!sendSms || isVoid || smsStarted.current) return
+    if (!sendSms || isVoid || smsStarted.current || receipt.receiptNo.startsWith('OFF-')) return
     smsStarted.current = true
     void supabase.functions
       .invoke('send-receipt-sms', { body: { receipt_no: receipt.receiptNo } })
@@ -64,6 +64,11 @@ export default function ReceiptModal({
             </div>
           )}
 
+          {receipt.receiptNo.startsWith('OFF-') && (
+            <p className="mb-3 rounded-md border border-amber-400 bg-amber-50 px-2 py-1 text-center text-xs font-bold uppercase tracking-wide text-amber-800">
+              Provisional receipt - final number is issued when the phone is back online
+            </p>
+          )}
           <div className="flex flex-col items-center text-center">
             <img src={schoolLogo} alt="" className="h-14 w-14 object-contain" />
             <p className="mt-2 text-base font-bold text-royal-900">SAT ROYAL BASIC SCHOOL</p>
