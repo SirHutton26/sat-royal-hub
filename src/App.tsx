@@ -4,6 +4,8 @@ import { AuthProvider } from '@/features/auth/AuthProvider'
 import { RequireRole } from '@/features/auth/RequireRole'
 import LoginPage from '@/pages/LoginPage'
 import IdleLogout from '@/components/auth/idle-logout'
+import PwaPrompts from '@/components/pwa/pwa-prompts'
+import SyncManager from '@/components/offline/sync-manager'
 import TeacherMasterResult from './pages/teacher/TeacherMasterResult'
 
 const AdminLayout = lazy(() => import('@/pages/admin/admin-layout'))
@@ -54,6 +56,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <IdleLogout />
+        <PwaPrompts />
+        <SyncManager />
         <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />

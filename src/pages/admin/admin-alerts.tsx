@@ -48,12 +48,17 @@ export default function AdminAlerts() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    const { error } = await supabase.from('alerts').insert({
-      title: values.title.trim(),
-      message: values.message.trim(),
-      created_by: user?.id,
-    })
+    const { data: created, error } = await supabase
+      .from('alerts')
+      .insert({
+        title: values.title.trim(),
+        message: values.message.trim(),
+        created_by: user?.id,
+      })
+      .select('id')
+      .single()
     if (!error) {
+      if (created) supabase.functions.invoke('send-push', { body: { alert_id: created.id } }) // fire and forget
       reset()
       loadAlerts()
     }
