@@ -77,19 +77,29 @@ Deno.serve(async (req) => {
       return json({ sent: false, reason: 'Guardian phone number is not valid' })
     }
 
-    const { data: bal } = await admin
+    // All of this student's fee items: this term's breakdown plus any unpaid earlier terms
+    const { data: bals } = await admin
       .from('student_fee_balances')
-      .select('balance')
+      .select('item, academic_year, term, balance')
       .eq('student_id', pay.student_id)
-      .eq('fee_structure_id', pay.fee_structure_id)
-      .maybeSingle()
-    const balance = Math.max(Number(bal?.balance ?? 0), 0)
+    const key = (y: string, t: string) => `${y}|${t}`
+    const thisKey = key(fee?.academic_year ?? '', fee?.term ?? '')
+    const rows = (bals ?? []).map((r) => ({ ...r, balance: Math.max(Number(r.balance ?? 0), 0), k: key(r.academic_year, r.term) }))
+    const current = rows.filter((r) => r.k === thisKey).sort((x, y) => x.item.localeCompare(y.item))
+    const arrears = rows.filter((r) => r.k < thisKey).reduce((sum, r) => sum + r.balance, 0)
+    const total = current.reduce((sum, r) => sum + r.balance, 0) + arrears
 
-    // "GHS" instead of the cedi sign keeps the text in plain GSM-7, so it stays one SMS segment
-    const sms =
-      `SAT Royal Basic School: Received ${cedis(Number(pay.amount))} for ${student.full_name ?? 'your ward'} ` +
-      `(${fee?.item ?? 'fees'}, ${fee?.term ?? ''} ${fee?.academic_year ?? ''}). ` +
-      `Balance: ${cedis(balance)}. Receipt ${receipt_no}. Thank you.`
+    const name = (student.full_name ?? 'your ward').replace(/\s+/g, ' ').trim()
+    // "GHS" instead of the cedi sign keeps the text in plain GSM-7
+    const lines = [
+      `SAT ROYAL BASIC SCHOOL: Received ${cedis(Number(pay.amount))} for ${name} (${fee?.item ?? 'fees'}, ${fee?.term ?? ''} ${fee?.academic_year ?? ''}).`,
+      `Balance breakdown:`,
+      ...current.map((r) => `${r.item}: ${cedis(r.balance)}`),
+      ...(arrears > 0 ? [`Arrears: ${cedis(arrears)}`] : []),
+      `Total balance: ${cedis(total)}`,
+      `Receipt ${receipt_no}. Thank you.`,
+    ]
+    const sms = lines.join('\n')
 
     // Claim the receipt first (payment_id is the primary key), so a double click
     // or two tabs can never send twice. fee_payments itself is never touched.
