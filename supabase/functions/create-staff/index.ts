@@ -37,8 +37,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Name, email and a password of at least 6 characters are required' }, 400)
     }
 
-    // The bursar has their own fees portal; everyone else uses the staff portal
-    const role = /^\s*bursar\s*$/i.test(String(position ?? '')) ? 'bursar' : 'staff'
+    // The bursar has the fees portal and the SMS officer has the messaging portal; everyone else uses the staff portal
+    const pos = String(position ?? '')
+    const role = /^\s*bursar\s*$/i.test(pos)
+      ? 'bursar'
+      : /^\s*(sms|messenger|sms officer|communications?)\s*$/i.test(pos)
+        ? 'messenger'
+        : 'staff'
 
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email: mail,

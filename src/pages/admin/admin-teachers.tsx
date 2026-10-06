@@ -66,6 +66,7 @@ interface TeacherRow {
   email: string | null
   is_active: boolean
   level_group: string | null
+  gender: string | null
   classId: string | null
   className: string | null
   subjects: string[]
@@ -654,12 +655,17 @@ export default function AdminTeachers() {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  async function setGender(id: string, value: string) {
+    const { error } = await supabase.from('profiles').update({ gender: value || null }).eq('id', id)
+    if (!error) setTeachers((ts) => ts.map((x) => (x.id === id ? { ...x, gender: value || null } : x)))
+  }
+
   async function loadData() {
     setLoading(true)
     const [profilesRes, classesRes, assignmentsRes, subjectsRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, email, is_active, level_group')
+        .select('id, full_name, email, is_active, level_group, gender')
         .eq('role', 'teacher')
         .order('full_name'),
       supabase.from('classes').select('id, name, teacher_id, level_group').order('name'),
@@ -690,6 +696,7 @@ export default function AdminTeachers() {
       full_name: p.full_name,
       email: p.email,
       is_active: p.is_active,
+      gender: p.gender ?? null,
       // use the saved level, or fall back to the level of the class they teach
       level_group: p.level_group ?? classLevelByTeacher.get(p.id) ?? null,
       classId: classIdByTeacher.get(p.id) ?? null,
@@ -842,6 +849,7 @@ export default function AdminTeachers() {
               <th className="px-4 py-3">SN</th>
               <th className="px-4 py-3">Class teacher</th>
               <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Gender</th>
               <th className="px-4 py-3">Level</th>
               <th className="px-4 py-3">Class</th>
               <th className="px-4 py-3">Subjects</th>
@@ -852,11 +860,11 @@ export default function AdminTeachers() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">Loading...</td>
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">Loading...</td>
               </tr>
             ) : teachers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">No teachers found.</td>
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">No teachers found.</td>
               </tr>
             ) : (
               teachers.map((t, i) => (
@@ -864,6 +872,17 @@ export default function AdminTeachers() {
                   <td className="px-4 py-3 text-gray-500">{i + 1}</td>
                   <td className="px-4 py-3 font-medium text-royal-900">{t.full_name || '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{t.email}</td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={t.gender ?? ''}
+                      onChange={(e) => void setGender(t.id, e.target.value)}
+                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
+                    >
+                      <option value="">Not set</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </td>
                   <td className="px-4 py-3">
                     <LevelBadge level={t.level_group} />
                   </td>

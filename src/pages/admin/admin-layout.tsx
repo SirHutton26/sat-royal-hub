@@ -16,6 +16,8 @@ import {
   Fingerprint,
   Wallet,
   UserCog,
+  Database,
+  History,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -32,6 +34,8 @@ const navItems = [
   { label: 'Alerts', to: '/admin/alerts', icon: Megaphone },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
   { label: 'Fees', to: '/admin/fees', icon: Wallet },
+  { label: 'Data House', to: '/admin/data-house', icon: Database },
+  { label: 'Activity Log', to: '/admin/activity-log', icon: History },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

@@ -149,6 +149,9 @@ export default function TeacherAttendanceRegister() {
             {className}
           </span>
         )}
+        <Link to="/teacher/attendance/term" className="ml-auto rounded-lg border border-royal-200 bg-white px-3 py-1.5 text-xs font-semibold text-royal-700 hover:bg-royal-50">
+          Term register (print)
+        </Link>
       </div>
 
       {!loading && !classId ? (

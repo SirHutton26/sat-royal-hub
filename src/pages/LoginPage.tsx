@@ -20,6 +20,7 @@ const HOME_BY_ROLE: Record<string, string> = {
   admin: '/admin',
   teacher: '/teacher',
   bursar: '/bursar',
+  messenger: '/messenger',
 }
 
 function BrandHeading() {

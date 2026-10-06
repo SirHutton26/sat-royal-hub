@@ -2,8 +2,9 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { checkCred, saveCred, setOfflineUser } from '@/lib/offline-db'
+import { flushActivity, logActivity, setActivityUser } from '@/lib/activity'
 
-export type Role = 'admin' | 'teacher' | 'bursar'
+export type Role = 'admin' | 'teacher' | 'bursar' | 'messenger'
 
 export interface Profile {
   id: string
@@ -155,6 +156,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    setActivityUser(session && profile && !offline ? { id: profile.id, name: profile.full_name || profile.email || 'User', role: profile.role } : null)
+  }, [session, profile, offline])
+
   async function offlineSignIn(email: string, password: string) {
     const r = await checkCred(email, password)
     if (r === 'none')
@@ -178,11 +183,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return error.message
     }
     const p = data.user ? await loadProfile(data.user.id) : null
-    if (p && data.user) await saveCred(e, data.user.id, password, p)
+    if (p && data.user) {
+      await saveCred(e, data.user.id, password, p)
+      void supabase.from('activity_log').insert({ user_id: data.user.id, user_name: p.full_name || p.email, user_role: p.role, action: 'login', entity: 'session' })
+    }
     return p ? null : 'Could not load your account profile. Please try again.'
   }
 
   async function signOut() {
+    logActivity('logout', 'session')
+    await flushActivity()
+    setActivityUser(null)
     try {
       await supabase.auth.signOut()
     } catch {

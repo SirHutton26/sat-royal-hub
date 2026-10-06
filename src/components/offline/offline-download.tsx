@@ -21,6 +21,8 @@ export default function OfflineDownload() {
   const [done, setDone] = useState(() => localStorage.getItem('sat-hub-offline-ready') ?? '')
   const routes = ROUTES[profile?.role ?? ''] ?? []
 
+  if (!routes.length) return null
+
   async function run() {
     if (!navigator.onLine) return
     let stop = false

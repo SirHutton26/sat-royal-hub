@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import IdleLogout from '@/components/auth/idle-logout'
 import PwaPrompts from '@/components/pwa/pwa-prompts'
 import SyncManager from '@/components/offline/sync-manager'
+import ActivityTracker from '@/components/activity/activity-tracker'
 import TeacherMasterResult from './pages/teacher/TeacherMasterResult'
 
 const AdminLayout = lazy(() => import('@/pages/admin/admin-layout'))
@@ -18,11 +19,16 @@ const AdminSubjects = lazy(() => import('@/pages/admin/admin-subjects'))
 const AdminExams = lazy(() => import('@/pages/admin/admin-exams'))
 const AdminSettings = lazy(() => import('@/pages/admin/admin-settings'))
 const AdminStaffAttendance = lazy(() => import('@/pages/admin/admin-staff-attendance'))
+const AdminDataHouse = lazy(() => import('@/pages/admin/admin-data-house'))
+const AdminActivityLog = lazy(() => import('@/pages/admin/admin-activity-log'))
 const AdminFees = lazy(() => import('@/pages/admin/admin-fees'))
 const AdminArrears = lazy(() => import('@/pages/admin/admin-arrears'))
 const AdminDailyRates = lazy(() => import('@/pages/admin/admin-daily-rates'))
 const AdminNonStaff = lazy(() => import('@/pages/admin/admin-non-staff'))
 
+const MessengerLayout = lazy(() => import('@/pages/messenger/messenger-layout'))
+const MessengerCompose = lazy(() => import('@/pages/messenger/messenger-compose'))
+const MessengerHistory = lazy(() => import('@/pages/messenger/messenger-history'))
 const BursarLayout = lazy(() => import('@/pages/bursar/bursar-layout'))
 const BursarDashboard = lazy(() => import('@/pages/bursar/bursar-dashboard'))
 const BursarRecordPayment = lazy(() => import('@/pages/bursar/bursar-record-payment'))
@@ -40,6 +46,7 @@ const TeacherDashboard = lazy(() => import('@/pages/teacher/teacher-dashboard'))
 const TeacherClass = lazy(() => import('@/pages/teacher/teacher-class'))
 const TeacherAttendance = lazy(() => import('@/pages/teacher/teacher-attendance'))
 const TeacherMarkAttendance = lazy(() => import('@/pages/teacher/teacher-mark-attendance'))
+const TeacherAttendanceTerm = lazy(() => import('@/pages/teacher/teacher-attendance-term'))
 const TeacherAttendanceRegister = lazy(() => import('@/pages/teacher/teacher-attendance-register'))
 const TeacherGrades = lazy(() => import('@/pages/teacher/teacher-grades'))
 const TeacherAlerts = lazy(() => import('@/pages/teacher/teacher-alerts'))
@@ -58,6 +65,7 @@ export default function App() {
         <IdleLogout />
         <PwaPrompts />
         <SyncManager />
+        <ActivityTracker />
         <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -74,12 +82,21 @@ export default function App() {
                 <Route path="settings" element={<AdminSettings />} />
                 <Route path="staff-attendance" element={<AdminStaffAttendance />} />
                 <Route path="fees" element={<AdminFees />} />
+                <Route path="data-house" element={<AdminDataHouse />} />
+                <Route path="activity-log" element={<AdminActivityLog />} />
                 <Route path="fees/arrears" element={<AdminArrears />} />
                 <Route path="non-staff" element={<AdminNonStaff />} />
                 <Route path="daily-rates" element={<AdminDailyRates />} />
               </Route>
             </Route>
 
+            <Route element={<RequireRole role="messenger" />}>
+              <Route path="/messenger" element={<MessengerLayout />}>
+                <Route index element={<MessengerCompose />} />
+                <Route path="history" element={<MessengerHistory />} />
+                <Route path="settings" element={<BursarSettings />} />
+              </Route>
+            </Route>
             <Route element={<RequireRole role="bursar" />}>
               <Route path="/bursar/onboarding" element={<TeacherOnboarding />} />
               <Route path="/bursar" element={<BursarLayout />}>
@@ -103,6 +120,7 @@ export default function App() {
                 <Route path="attendance" element={<TeacherAttendance />} />
                 <Route path="attendance/mark" element={<TeacherMarkAttendance />} />
                 <Route path="attendance/register" element={<TeacherAttendanceRegister />} />
+                <Route path="attendance/term" element={<TeacherAttendanceTerm />} />
                 <Route path="grades" element={<TeacherGrades />} />
                 <Route path="alerts" element={<TeacherAlerts />} />
                 <Route path="clock-in" element={<TeacherClockIn />} />

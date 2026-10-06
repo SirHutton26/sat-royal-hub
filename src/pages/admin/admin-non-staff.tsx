@@ -17,6 +17,7 @@ import {
   KeyRound,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import CreateLoginModal from '@/pages/admin/create-login-modal'
 
 /* ---------- types & constants ---------- */
 
@@ -40,6 +41,7 @@ const POSITION_SUGGESTIONS = [
   'Headteacher',
   'Assistant Headteacher',
   'Bursar',
+  'SMS Officer',
   'Accountant',
   'Secretary',
   'Store-keeper',
@@ -52,7 +54,7 @@ const POSITION_SUGGESTIONS = [
   'Gardener',
 ]
 
-const ROLE_LABEL: Record<string, string> = { admin: 'Admin', teacher: 'Teacher', bursar: 'Bursar' }
+const ROLE_LABEL: Record<string, string> = { admin: 'Admin', teacher: 'Teacher', bursar: 'Bursar', messenger: 'SMS Officer', staff: 'Staff' }
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-royal-500 focus:ring-2 focus:ring-royal-100'
@@ -101,6 +103,7 @@ export default function AdminNonStaff() {
   const [email, setEmail] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [formError, setFormError] = useState<string | null>(null)
+  const [loginFor, setLoginFor] = useState<StaffRow | null>(null)
 
   const toastTimer = useRef<number | undefined>(undefined)
   function showToast(type: 'ok' | 'error', text: string) {
@@ -451,6 +454,16 @@ export default function AdminNonStaff() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
+                        {!login && (
+                          <button
+                            onClick={() => setLoginFor(r)}
+                            aria-label="Create login"
+                            title="Create login"
+                            className="rounded-md p-2 text-gold-500 transition hover:bg-gold-400/20"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEdit(r)}
                           aria-label="Edit"
@@ -571,6 +584,18 @@ export default function AdminNonStaff() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {loginFor && (
+        <CreateLoginModal
+          row={loginFor}
+          onClose={() => setLoginFor(null)}
+          onDone={(m) => {
+            setLoginFor(null)
+            showToast('ok', m)
+            void load()
+          }}
+        />
       )}
 
       {/* Saving overlay */}
