@@ -73,7 +73,7 @@ export default function IdleLogout() {
         } catch {
           // the sign-out still happens, the login notice just won't show
         }
-        void signOut()
+        void signOut(false)
       } else if (idle >= IDLE_LIMIT_MS - WARNING_MS) {
         warningRef.current = true
         setSecondsLeft(Math.ceil((IDLE_LIMIT_MS - idle) / 1000))
@@ -117,7 +117,7 @@ export default function IdleLogout() {
           <button
             onClick={() => {
               signingOut.current = true
-              void signOut()
+              void signOut(false)
             }}
             className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
           >

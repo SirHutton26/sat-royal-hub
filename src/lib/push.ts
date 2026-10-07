@@ -40,3 +40,17 @@ export async function enablePush(userId: string): Promise<'ok' | 'denied' | 'uns
     return 'error'
   }
 }
+
+/** Stop this phone receiving the signed-in user's alerts (used on manual sign-out). */
+export async function dropPush() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    const sub = await reg?.pushManager.getSubscription()
+    if (sub) {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+      await sub.unsubscribe()
+    }
+  } catch {
+    /* best effort */
+  }
+}

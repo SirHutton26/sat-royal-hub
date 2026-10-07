@@ -1,17 +1,37 @@
 // Shared rules for staff, non-teaching staff and student attendance.
 // Attendance is only taken on school days: Monday to Friday.
 
-export const CAMPUS_QR_SECRET = 'SAT-ROYAL-CAMPUS-CHECKIN-2026'
-
 export const WEEKEND_MESSAGE = 'Attendance is only taken on school days, Monday to Friday.'
 
-// Staff clock-in windows, in minutes from midnight
+// Staff clock-in rules, in minutes from midnight (Ghana time)
 export const STAFF_WINDOWS = {
   checkInStart: 6 * 60, // 6:00 AM
-  presentEnd: 7 * 60 + 15, // on time until 7:15 AM
-  lateEnd: 9 * 60 + 15, // Late until 9:15 AM, absent after
+  presentEnd: 7 * 60 + 15, // 6:00 - 7:15  Present (green)
+  lateEnd: 9 * 60 + 15, // 7:16 - 9:15  Present but late (orange)
+  veryLateEnd: 12 * 60, // 9:16 - 12:00 Present but extremely late (red); after 12:00 = Absent
   signOutStart: 15 * 60, // 3:00 PM
   signOutEnd: 18 * 60, // 6:00 PM
+}
+
+/** What the database stores -> what people read */
+export function staffStatusLabel(status: string | null | undefined) {
+  if (status === 'Late') return 'Present but late'
+  if (status === 'Very Late') return 'Present but extremely late'
+  return status ?? ''
+}
+
+/** Colours for a status pill */
+export function staffStatusClass(status: string | null | undefined) {
+  if (status === 'Late') return 'bg-orange-50 text-orange-700'
+  if (status === 'Very Late') return 'bg-red-50 text-red-700'
+  return 'bg-green-50 text-green-700'
+}
+
+/** Minutes since midnight right now in Ghana (Africa/Accra), whatever the device's time zone */
+export function accraMinutesNow() {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Accra', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date())
+  const h = Number(parts.find((x) => x.type === 'hour')?.value ?? 0) % 24
+  return h * 60 + Number(parts.find((x) => x.type === 'minute')?.value ?? 0)
 }
 
 /** YYYY-MM-DD in the device's local time (toISOString would give UTC) */

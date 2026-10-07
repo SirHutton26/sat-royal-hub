@@ -69,7 +69,6 @@ export default function App() {
         <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-
             <Route element={<RequireRole role="admin" />}>
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminDashboard />} />

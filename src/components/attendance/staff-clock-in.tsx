@@ -3,7 +3,7 @@ import { CheckCircle2, Clock, Calendar, AlertCircle, QrCode, X, CalendarOff } fr
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { CAMPUS_QR_SECRET, STAFF_WINDOWS, WEEKEND_MESSAGE, isWeekday, localISO } from '@/lib/attendance'
+import { STAFF_WINDOWS, WEEKEND_MESSAGE, isWeekday, localISO, staffStatusClass, staffStatusLabel } from '@/lib/attendance'
 import schoolLogo from '@/assets/school-logo.png'
 
 // Used by every staff member who scans the campus QR code (teachers and the bursar).
@@ -16,7 +16,7 @@ interface AttendanceRecord {
   status: string
 }
 
-const { checkInStart, presentEnd, lateEnd, signOutStart, signOutEnd } = STAFF_WINDOWS
+const { checkInStart, presentEnd, lateEnd, veryLateEnd, signOutStart, signOutEnd } = STAFF_WINDOWS
 
 export default function StaffClockIn() {
   const { profile } = useAuth()
@@ -36,7 +36,7 @@ export default function StaffClockIn() {
 
   const schoolDay = isWeekday(now)
   const timeInMinutes = now.getHours() * 60 + now.getMinutes()
-  const isMorningCheckInActive = schoolDay && timeInMinutes >= checkInStart && timeInMinutes <= lateEnd
+  const isMorningCheckInActive = schoolDay && timeInMinutes >= checkInStart && timeInMinutes <= veryLateEnd
   const isAfternoonSignOutActive = schoolDay && timeInMinutes >= signOutStart && timeInMinutes <= signOutEnd
 
   const todayStr = now.toLocaleDateString('en-GB', {
@@ -71,62 +71,31 @@ export default function StaffClockIn() {
 
     setShowScanner(false)
 
-    if (scannedText !== CAMPUS_QR_SECRET) {
-      setToast({ type: 'error', message: 'Invalid QR code. Please scan the official campus code.' })
-      return
-    }
-    if (!isWeekday(new Date())) {
-      setToast({ type: 'error', message: WEEKEND_MESSAGE })
+    if (!scannedText) {
+      setToast({ type: 'error', message: 'Could not read that QR code. Please try again.' })
       return
     }
 
     setActionLoading(true)
     setToast(null)
 
-    const today = localISO()
-    const nowDate = new Date()
-    const nowIso = nowDate.toISOString()
-    const minutes = nowDate.getHours() * 60 + nowDate.getMinutes()
+    // The server checks the code and uses its own clock to decide Present / Late
+    const { data, error } = await supabase.rpc('staff_clock', {
+      p_action: scanMode === 'check-in' ? 'in' : 'out',
+      p_token: scannedText,
+    })
+    setActionLoading(false)
 
-    if (scanMode === 'check-in') {
-      const computedStatus = minutes > presentEnd && minutes <= lateEnd ? 'Late' : 'Present'
-
-      const { data, error } = await supabase
-        .from('staff_attendance')
-        .upsert(
-          { teacher_id: profile?.id, date: today, clock_in_at: nowIso, status: computedStatus },
-          { onConflict: 'teacher_id,date' },
-        )
-        .select('id, clock_in_at, clock_out_at, status')
-        .single()
-
-      setActionLoading(false)
-      if (error) {
-        setToast({ type: 'error', message: error.message })
-      } else {
-        setAttendance(data)
-        setToast({ type: 'success', message: `Checked in successfully (${computedStatus})!` })
-      }
-    } else {
-      if (!attendance) {
-        setActionLoading(false)
-        return
-      }
-      const { data, error } = await supabase
-        .from('staff_attendance')
-        .update({ clock_out_at: nowIso })
-        .eq('id', attendance.id)
-        .select('id, clock_in_at, clock_out_at, status')
-        .single()
-
-      setActionLoading(false)
-      if (error) {
-        setToast({ type: 'error', message: error.message })
-      } else {
-        setAttendance(data)
-        setToast({ type: 'success', message: 'Successfully signed out. Have a great evening!' })
-      }
+    if (error) {
+      setToast({ type: 'error', message: error.message })
+      return
     }
+    const rec = data as AttendanceRecord
+    setAttendance(rec)
+    setToast({
+      type: 'success',
+      message: scanMode === 'check-in' ? `Checked in successfully: ${staffStatusLabel(rec.status)}!` : 'Successfully signed out. Have a great evening!',
+    })
   }
 
   const formatTime = (iso: string | null) =>
@@ -169,15 +138,15 @@ export default function StaffClockIn() {
         ) : (
           <>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
-              {!hasCheckedIn && timeInMinutes > lateEnd && (
+              {!hasCheckedIn && timeInMinutes > veryLateEnd && (
                 <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">Marked Absent (Missed Check-In Window)</span>
               )}
-              {!hasCheckedIn && timeInMinutes <= lateEnd && (
+              {!hasCheckedIn && timeInMinutes <= veryLateEnd && (
                 <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Not Checked In Yet</span>
               )}
               {hasCheckedIn && !hasSignedOut && (
-                <span className="rounded-full bg-green-100 px-3 py-1 text-green-800">
-                  Status: {attendance?.status} (Checked In)
+                <span className={`rounded-full px-3 py-1 ${staffStatusClass(attendance?.status)}`}>
+                  Status: {staffStatusLabel(attendance?.status)} (Checked In)
                 </span>
               )}
               {hasSignedOut && <span className="rounded-full bg-royal-100 px-3 py-1 text-royal-800">Day Completed (Signed Out)</span>}
@@ -206,20 +175,22 @@ export default function StaffClockIn() {
                     setShowScanner(true)
                   }}
                   disabled={actionLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3.5 text-sm font-semibold text-white shadow transition hover:bg-green-700 disabled:opacity-60"
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold text-white shadow transition disabled:opacity-60 ${timeInMinutes <= presentEnd ? 'bg-green-600 hover:bg-green-700' : timeInMinutes <= lateEnd ? 'bg-orange-500 hover:bg-orange-600' : 'bg-red-600 hover:bg-red-700'}`}
                 >
                   <QrCode className="h-5 w-5" />
                   {actionLoading
                     ? 'Processing...'
                     : timeInMinutes <= presentEnd
                       ? 'Scan QR Code to Check In (Present)'
-                      : 'Scan QR Code to Check In (Late)'}
+                      : timeInMinutes <= lateEnd
+                        ? 'Scan QR Code to Check In (Present but late)'
+                        : 'Scan QR Code to Check In (Extremely late)'}
                 </button>
               )}
 
-              {!hasCheckedIn && timeInMinutes > lateEnd && timeInMinutes < signOutStart && (
+              {!hasCheckedIn && timeInMinutes > veryLateEnd && timeInMinutes < signOutStart && (
                 <div className="rounded-xl border border-red-100 bg-red-50 py-3 text-center text-xs font-semibold text-red-700">
-                  Check-in window closed at 9:15 AM. You have been marked absent for today.
+                  Check-in closed at 12:00 PM. You have been marked absent for today.
                 </div>
               )}
 

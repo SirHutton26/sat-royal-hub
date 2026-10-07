@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 
 // Change this if your photos live in a different Supabase Storage bucket
+import StudentPhotoImg from '@/components/student-photo'
+import { forgetPhoto } from '@/lib/photo'
 const PHOTO_BUCKET = 'student-photos'
 const MAX_PHOTO_MB = 8
 
@@ -48,7 +50,6 @@ function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
 }
 
 function StudentAvatar({ url, name, size }: { url: string | null; name: string; size: string }) {
-  if (url) return <img src={url} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
   const initials =
     name
       .split(' ')
@@ -56,11 +57,13 @@ function StudentAvatar({ url, name, size }: { url: string | null; name: string; 
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join('') || '?'
-  return (
+  const circle = (
     <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-royal-600 text-2xl font-bold text-white`}>
       {initials}
     </span>
   )
+  if (url) return <StudentPhotoImg url={url} className={`${size} shrink-0 rounded-full object-cover`} fallback={circle} />
+  return circle
 }
 
 function formatDob(dob: string | null): string {
@@ -240,11 +243,12 @@ function StudentModal({
         setError(`Could not upload the photo: ${upErr.message}`)
         return
       }
-      const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      // ?v= forces browsers to show the new photo instead of the cached one
-      photoUrl = `${pub.publicUrl}?v=${Date.now()}`
+      // store the private path; screens load it through a short-lived link
+      forgetPhoto(path)
+      photoUrl = path
     } else if (removePhoto) {
       photoUrl = null
+      forgetPhoto(path)
       await supabase.storage.from(PHOTO_BUCKET).remove([path]) // best effort
     }
 

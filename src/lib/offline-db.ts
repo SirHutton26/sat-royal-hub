@@ -97,3 +97,11 @@ export async function checkCred(email: string, password: string): Promise<CredRo
   const h = await derive(password, unb64(row.salt), row.iter)
   return h === row.hash ? row : 'wrong'
 }
+
+/** Erase locally saved school data (not the unsent-changes queue, which must still sync). */
+export async function wipeLocalData() {
+  await db.cache.clear()
+  for (const k of Object.keys(localStorage)) {
+    if (k.startsWith('sat-hub-warm') || k === 'sat-hub-offline-ready' || k.startsWith('sat-term-')) localStorage.removeItem(k)
+  }
+}

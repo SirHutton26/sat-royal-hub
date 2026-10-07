@@ -7,7 +7,6 @@ const QUEUE_TABLES = new Set([
   'score_bank_entries',
   'score_bank_scores',
   'exam_scores',
-  'staff_attendance',
   'daily_collections',
   'daily_feeding',
   'weekly_class_fee_remittances',

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { checkCred, saveCred, setOfflineUser } from '@/lib/offline-db'
+import { checkCred, saveCred, setOfflineUser, wipeLocalData } from '@/lib/offline-db'
+import { dropPush } from '@/lib/push'
 import { flushActivity, logActivity, setActivityUser } from '@/lib/activity'
 
 export type Role = 'admin' | 'teacher' | 'bursar' | 'messenger'
@@ -26,7 +27,8 @@ interface AuthState {
   /** true while signed in from this phone's saved login with no connection */
   offline: boolean
   signIn: (email: string, password: string) => Promise<string | null>
-  signOut: () => Promise<void>
+  /** wipe=false keeps saved offline data (used for the idle timeout) */
+  signOut: (wipe?: unknown) => Promise<void>
   refreshProfile: () => Promise<void>
 }
 
@@ -190,9 +192,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return p ? null : 'Could not load your account profile. Please try again.'
   }
 
-  async function signOut() {
+  async function signOut(wipe: unknown = true) {
+    const doWipe = wipe !== false // button clicks pass an event, which counts as true
     logActivity('logout', 'session')
     await flushActivity()
+    if (doWipe) await dropPush()
     setActivityUser(null)
     try {
       await supabase.auth.signOut()
@@ -200,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* offline: local clean-up below is what matters */
     }
     memCred.current = null
+    if (doWipe) await wipeLocalData()
     clearLocal()
   }
 

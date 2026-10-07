@@ -20,6 +20,8 @@ import {
   UserX,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import StudentPhotoImg from '@/components/student-photo'
+import { forgetPhoto } from '@/lib/photo'
 
 interface SchoolClass {
   id: string
@@ -87,7 +89,6 @@ async function insertStudents(rows: StudentInsert[]): Promise<string | null> {
 }
 
 function StudentAvatar({ url, name, size = 'h-10 w-10' }: { url: string | null; name: string; size?: string }) {
-  if (url) return <img src={url} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
   const initials =
     name
       .split(' ')
@@ -95,11 +96,13 @@ function StudentAvatar({ url, name, size = 'h-10 w-10' }: { url: string | null; 
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join('') || '?'
-  return (
+  const circle = (
     <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-royal-600 text-xs font-bold text-white`}>
       {initials}
     </span>
   )
+  if (url) return <StudentPhotoImg url={url} className={`${size} shrink-0 rounded-full object-cover`} fallback={circle} />
+  return circle
 }
 
 function StatusBadge({ active }: { active: boolean }) {
@@ -206,8 +209,8 @@ function StudentFormModal({
     const path = `${studentId}/photo.${ext}`
     const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
     if (error) return { error: error.message }
-    const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
-    return { url: `${url}?v=${Date.now()}` }
+    forgetPhoto(path)
+    return { url: path } // private path; screens load it through a short-lived link
   }
 
   async function onSubmit(values: StudentValues) {

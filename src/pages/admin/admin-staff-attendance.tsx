@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
-import { QrCode, Printer, Users } from 'lucide-react'
+import { QrCode, Printer, RefreshCw, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { CAMPUS_QR_SECRET, lastWeekday, localISO } from '@/lib/attendance'
+import { QRCodeSVG } from 'qrcode.react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { STAFF_WINDOWS, accraMinutesNow, lastWeekday, localISO, staffStatusClass, staffStatusLabel } from '@/lib/attendance'
 import schoolLogo from '@/assets/school-logo.png'
 
 interface Teacher {
   id: string
   full_name: string | null
   email: string | null
+  role: string
 }
 
 interface Record {
@@ -17,21 +20,24 @@ interface Record {
   status: string
 }
 
-const VALID_CAMPUS_QR_SECRET = CAMPUS_QR_SECRET
-
 export default function AdminStaffAttendance() {
   const [date, setDate] = useState(lastWeekday())
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [records, setRecords] = useState<Record[]>([])
   const [loading, setLoading] = useState(true)
   const [showQRModal, setShowQRModal] = useState(false)
+  const [qrToken, setQrToken] = useState('')
+
+  useEffect(() => {
+    supabase.from('staff_qr_secret').select('token').eq('id', 1).maybeSingle().then(({ data }) => setQrToken(data?.token ?? ''))
+  }, [])
 
   useEffect(() => {
     let active = true
     async function load() {
       setLoading(true)
       const [teachersRes, recordsRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email').eq('role', 'teacher').eq('is_active', true).order('full_name'),
+        supabase.from('profiles').select('id, full_name, email, role').in('role', ['teacher', 'bursar']).eq('is_active', true).order('full_name'),
         supabase.from('staff_attendance').select('teacher_id, clock_in_at, clock_out_at, status').eq('date', date),
       ])
       if (!active) return
@@ -46,9 +52,22 @@ export default function AdminStaffAttendance() {
   }, [date])
 
   const byTeacher = new Map(records.map((r) => [r.teacher_id, r]))
-  const presentCount = records.filter((r) => r.status === 'Checked In' || r.status === 'Signed Out' || r.status === 'Present').length
+  const isToday = date === localISO()
+  // After 12:00 noon (Ghana) anyone without a check-in is Absent; earlier today they simply haven't come yet
+  const absentNow = !isToday || accraMinutesNow() > STAFF_WINDOWS.veryLateEnd
+  const presentCount = records.filter((r) => r.status !== 'Late' && r.status !== 'Very Late').length
   const lateCount = records.filter((r) => r.status === 'Late').length
-  const missingCount = Math.max(0, teachers.length - records.length)
+  const veryLateCount = records.filter((r) => r.status === 'Very Late').length
+  const absentCount = absentNow ? Math.max(0, teachers.filter((t) => !byTeacher.has(t.id)).length) : 0
+
+  async function regenerateQr() {
+    if (!confirm('Create a new QR code? Every printed copy of the old one will stop working.')) return
+    const next = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+    const { error } = await supabase.from('staff_qr_secret').upsert({ id: 1, token: next })
+    if (error) return alert(error.message)
+    setQrToken(next)
+    alert('New QR code created. Print it and replace the old one.')
+  }
 
   const handlePrintQR = () => {
     const printWindow = window.open('', '_blank')
@@ -72,7 +91,7 @@ export default function AdminStaffAttendance() {
           <h1>SAT ROYAL BASIC SCHOOL</h1>
           <h2>Official Staff Campus Check-In QR Code</h2>
           <div class="qr-box">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(VALID_CAMPUS_QR_SECRET)}" alt="QR Code" style="width:250px;height:250px;" />
+            ${renderToStaticMarkup(<QRCodeSVG value={qrToken} size={250} />)}
           </div>
           <p class="instructions">Open the <b>SAT Royal Hub PWA</b> on your mobile phone, click <b>Scan Campus QR Code</b>, and point your camera here to record your arrival on campus.</p>
         </body>
@@ -104,6 +123,13 @@ export default function AdminStaffAttendance() {
         />
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-green-500" />6:00 - 7:15 Present</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-orange-500" />7:16 - 9:15 Present but late</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500" />9:16 - 12:00 Present but extremely late</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-gray-800" />After 12:00 Absent</span>
+      </div>
+
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-4">
@@ -128,6 +154,14 @@ export default function AdminStaffAttendance() {
             >
               <Printer className="h-3.5 w-3.5" /> Print A4
             </button>
+            <button
+              onClick={regenerateQr}
+              title="Create a new QR code"
+              aria-label="New QR code"
+              className="rounded-xl border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
@@ -147,12 +181,16 @@ export default function AdminStaffAttendance() {
               <p className="text-[10px] font-semibold uppercase text-gray-400">Present</p>
             </div>
             <div className="border-l border-gray-200 pl-3">
-              <p className="text-sm font-bold text-amber-600">{lateCount}</p>
+              <p className="text-sm font-bold text-orange-500">{lateCount}</p>
               <p className="text-[10px] font-semibold uppercase text-gray-400">Late</p>
             </div>
             <div className="border-l border-gray-200 pl-3">
-              <p className="text-sm font-bold text-red-600">{missingCount}</p>
-              <p className="text-[10px] font-semibold uppercase text-gray-400">Missing</p>
+              <p className="text-sm font-bold text-red-600">{veryLateCount}</p>
+              <p className="text-[10px] font-semibold uppercase text-gray-400">Very late</p>
+            </div>
+            <div className="border-l border-gray-200 pl-3">
+              <p className="text-sm font-bold text-gray-800">{absentCount}</p>
+              <p className="text-[10px] font-semibold uppercase text-gray-400">Absent</p>
             </div>
           </div>
         </div>
@@ -162,7 +200,7 @@ export default function AdminStaffAttendance() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-100 bg-gray-50/50 text-xs uppercase text-gray-500">
             <tr>
-              <th className="px-4 py-3">Teacher Name</th>
+              <th className="px-4 py-3">Staff Name</th>
               <th className="px-4 py-3">Check-In</th>
               <th className="px-4 py-3">Sign-Out</th>
               <th className="px-4 py-3">Status</th>
@@ -175,14 +213,17 @@ export default function AdminStaffAttendance() {
               </tr>
             ) : teachers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No active teachers found.</td>
+                <td colSpan={4} className="px-4 py-8 text-center text-gray-400">No active staff found.</td>
               </tr>
             ) : (
               teachers.map((t) => {
                 const r = byTeacher.get(t.id)
                 return (
                   <tr key={t.id} className="border-b border-gray-50 last:border-0 hover:bg-royal-50/30">
-                    <td className="px-4 py-3 font-medium text-royal-900">{t.full_name || t.email}</td>
+                    <td className="px-4 py-3 font-medium text-royal-900">
+                      {t.full_name || t.email}
+                      {t.role === 'bursar' && <span className="ml-2 text-xs font-normal text-gray-400">Bursar</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">
                       {r?.clock_in_at ? new Date(r.clock_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
@@ -191,16 +232,14 @@ export default function AdminStaffAttendance() {
                     </td>
                     <td className="px-4 py-3">
                       {!r ? (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
-                          Not Clocked In
-                        </span>
-                      ) : r.status === 'Late' ? (
-                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                          Late
-                        </span>
+                        absentNow ? (
+                          <span className="inline-flex items-center rounded-full bg-gray-800 px-2.5 py-1 text-xs font-semibold text-white">Absent</span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">Not clocked in yet</span>
+                        )
                       ) : (
-                        <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
-                          {r.status}
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${staffStatusClass(r.status)}`}>
+                          {staffStatusLabel(r.status)}
                         </span>
                       )}
                     </td>
@@ -220,11 +259,7 @@ export default function AdminStaffAttendance() {
             <p className="mt-1 text-xs text-gray-500">Display this code physically on campus for teachers to scan.</p>
             
             <div className="my-6 inline-block rounded-2xl border-2 border-royal-100 bg-gray-50 p-4">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(VALID_CAMPUS_QR_SECRET)}`}
-                alt="QR Code"
-                className="mx-auto h-48 w-48 object-contain"
-              />
+              {qrToken ? <QRCodeSVG value={qrToken} size={192} className="mx-auto" /> : <p className="text-xs text-gray-500">No QR code yet. Press the refresh button to create one.</p>}
             </div>
 
             <div className="flex gap-2">
