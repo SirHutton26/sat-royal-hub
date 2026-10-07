@@ -31,7 +31,10 @@ Deno.serve(async (req) => {
       Deno.env.get('VAPID_PRIVATE_KEY')!,
     )
 
-    const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth')
+    const { data: allSubs } = await admin.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth')
+    const { data: active } = await admin.from('profiles').select('id').eq('is_active', true)
+    const activeIds = new Set((active ?? []).map((a) => a.id))
+    const subs = (allSubs ?? []).filter((x) => activeIds.has(x.user_id)) // deactivated accounts get nothing
     const payload = JSON.stringify({
       title: alert.title,
       body: alert.message.length > 140 ? alert.message.slice(0, 137) + '...' : alert.message,
