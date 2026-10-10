@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { BarChart3, BellRing, ClipboardCheck, FileText, GraduationCap, Loader2, Store, UserCheck, Wallet } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { localISO, staffStatusClass, staffStatusLabel } from '@/lib/attendance'
+import { isWeekday, lastWeekday, localISO, parseISODate, staffStatusClass, staffStatusLabel } from '@/lib/attendance'
 import { money } from '@/components/fees/fee-utils'
 import { addDays, isoOf, monday } from '@/lib/store'
 import { ROLE_LABEL, classRows, isFemale, isMale, loadDay, pctPresent, staffSummary, type Day } from '@/lib/headteacher'
@@ -13,9 +13,26 @@ const greeting = () => {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
+function HeroWave() {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 leading-[0]">
+      <svg viewBox="0 0 1440 120" className="h-14 w-full text-royal-900/30 sm:h-16" preserveAspectRatio="none">
+        <path fill="currentColor" d="M0,48 C240,90 480,10 720,32 C960,54 1200,100 1440,64 L1440,120 L0,120 Z" />
+      </svg>
+      <svg viewBox="0 0 1440 120" className="-mt-10 h-12 w-full text-gold-400 sm:-mt-12 sm:h-14" preserveAspectRatio="none">
+        <path fill="currentColor" d="M0,64 C240,32 480,92 720,76 C960,60 1200,16 1440,48 L1440,120 L0,120 Z" />
+      </svg>
+    </div>
+  )
+}
+
 export default function HeadteacherDashboard() {
   const { profile } = useAuth()
-  const today = localISO()
+  // School runs Monday to Friday. On a weekend the figures shown are the last school day's.
+  const schoolDay = isWeekday()
+  const today = lastWeekday()
+  const isToday = today === localISO()
+  const dayWord = isToday ? 'today' : parseISODate(today).toLocaleDateString('en-GB', { weekday: 'long' })
   const [day, setDay] = useState<Day | null>(null)
   const [fees, setFees] = useState<{ today: number; week: number } | null>(null)
 
@@ -51,6 +68,7 @@ export default function HeadteacherDashboard() {
   const notTaken = rows.filter((r) => r.roll > 0 && r.notMarked === r.roll)
   const attention = day && ss ? day.staff.map((s) => ({ s, r: ss.recOf.get(s.id) })).filter(({ r }) => (r ? r.status === 'Late' || r.status === 'Very Late' : ss.absentNow)) : []
   const first = (profile?.full_name || '').split(' ')[0]
+  const initials = (profile?.full_name || 'H').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 
   const card = 'rounded-2xl bg-white p-4 shadow-sm'
   const links = [
@@ -66,13 +84,38 @@ export default function HeadteacherDashboard() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="rounded-2xl bg-gradient-to-r from-royal-800 to-royal-600 p-5 text-white shadow-sm">
-        <p className="text-sm text-white/70">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        <h1 className="mt-1 text-2xl font-bold">
-          {greeting()}
-          {first ? `, ${first}` : ''}
-        </h1>
-        <p className="mt-1 text-sm text-white/80">Here is how the school is doing today.</p>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-royal-700 via-royal-600 to-royal-500 px-6 pb-16 pt-6 text-white shadow-lg sm:pb-20">
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-royal-100">
+              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+            <h1 className="mt-3 text-2xl font-bold sm:text-3xl">
+              {greeting()}, <span className="text-gold-400">{first || 'Sir'}</span>
+            </h1>
+            <div className="mt-3 h-1 w-20 rounded bg-royal-300" />
+            <p className="mt-3 text-sm text-royal-100">
+              {schoolDay ? 'Here is how the school is doing today.' : `No school today. Showing ${dayWord}'s figures.`}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-xs font-bold text-royal-900 shadow-md">
+                <GraduationCap className="h-4 w-4" />
+                Headteacher
+              </span>
+              <span className="inline-flex items-center rounded-full bg-gold-400 px-3 py-1.5 text-xs font-bold text-royal-900">
+                {schoolDay ? 'School day' : 'Weekend'}
+              </span>
+            </div>
+          </div>
+          <div className="relative hidden shrink-0 sm:block">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="h-20 w-20 rounded-full border-4 border-gold-400 object-cover shadow-lg" />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-gold-400 bg-royal-900 text-2xl font-bold text-gold-400 shadow-lg">{initials}</div>
+            )}
+          </div>
+        </div>
+        <HeroWave />
       </div>
 
       {!day ? (
@@ -81,7 +124,7 @@ export default function HeadteacherDashboard() {
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <div className={card}>
-              <p className="text-xs font-medium text-gray-500">Staff in today</p>
+              <p className="text-xs font-medium text-gray-500">Staff in {dayWord}</p>
               <p className="mt-1 text-2xl font-bold text-green-600">
                 {ss!.present + ss!.late + ss!.veryLate}
                 <span className="text-sm font-medium text-gray-400"> / {ss!.total}</span>
@@ -98,7 +141,7 @@ export default function HeadteacherDashboard() {
               </p>
             </div>
             <div className={card}>
-              <p className="text-xs font-medium text-gray-500">Fees collected today</p>
+              <p className="text-xs font-medium text-gray-500">Fees collected {dayWord}</p>
               <p className="mt-1 text-2xl font-bold text-royal-900">{fees ? money(fees.today) : '...'}</p>
               <p className="text-xs text-gray-400">{fees ? `${money(fees.week)} this week` : ''}</p>
             </div>
