@@ -9,6 +9,7 @@ import { warmBalances } from '@/lib/offline-sync'
 const ROUTES: Record<string, string[]> = {
   admin: ['', 'teachers', 'class', 'students', 'alerts', 'subjects', 'exams', 'settings', 'staff-attendance', 'fees', 'fees/arrears', 'non-staff', 'daily-rates'].map((p) => `/admin/${p}`.replace(/\/$/, '')),
   bursar: ['', 'record-payment', 'receipts', 'students', 'reports', 'attendance', 'activity', 'daily', 'settings'].map((p) => `/bursar/${p}`.replace(/\/$/, '')),
+  storekeeper: ['', 'week', 'items'].map((p) => `/storekeeper/${p}`.replace(/\/$/, '')),
   teacher: ['', 'class', 'attendance', 'attendance/mark', 'attendance/register', 'grades', 'alerts', 'exams', 'score-bank', 'sba', 'fees'].map((p) => `/teacher/${p}`.replace(/\/$/, '')),
 }
 

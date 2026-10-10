@@ -1,4 +1,5 @@
 import OfflineDownload from '@/components/offline/offline-download'
+import MfaSetup from '@/components/security/mfa-setup'
 import { useState } from 'react'
 import { KeyRound, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -59,6 +60,7 @@ export default function BursarSettings() {
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold text-royal-900">Settings</h1>
       <p className="mt-1 text-sm text-gray-500">Manage your account.</p>
+      <MfaSetup />
       <OfflineDownload />
 
       <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm">

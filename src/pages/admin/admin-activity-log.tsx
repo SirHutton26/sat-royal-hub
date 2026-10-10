@@ -26,7 +26,7 @@ const ENTITY: Record<string, string> = {
   fee_payments: 'payment', attendance: 'attendance', staff_attendance: 'staff clock-in', exam_sessions: 'exam session',
   exam_scores: 'exam score', score_bank_entries: 'score bank entry', score_bank_scores: 'score bank score', sba_configs: 'SBA setup',
   sba_results: 'SBA result', grades: 'grade', daily_collections: 'daily collection', daily_feeding: 'daily feeding',
-  daily_fee_rates: 'daily fee rate', weekly_class_fee_remittances: 'weekly remittance', session: 'session',
+  daily_fee_rates: 'daily fee rate', store_items: 'store item', store_sales: 'store sale', store_submissions: 'money submitted', weekly_class_fee_remittances: 'weekly remittance', session: 'session',
 }
 const VERB: Record<string, string> = { create: 'Added', update: 'Changed', delete: 'Removed', login: 'Signed in', logout: 'Signed out' }
 const BADGE: Record<string, string> = {
@@ -278,7 +278,7 @@ export default function AdminActivityLog() {
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-royal-600 font-bold text-white">{(u.full_name || u.email || '?')[0].toUpperCase()}</span>
                 <span className="min-w-0">
                   <span className="block truncate font-semibold text-royal-900">{u.full_name || u.email}</span>
-                  <span className="block text-xs capitalize text-gray-500">{u.role === 'messenger' ? 'SMS officer' : u.role}</span>
+                  <span className="block text-xs capitalize text-gray-500">{({ messenger: 'SMS officer', storekeeper: 'Store-keeper' } as Record<string, string>)[u.role] ?? u.role}</span>
                 </span>
               </button>
             ))}

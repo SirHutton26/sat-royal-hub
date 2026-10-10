@@ -1,0 +1,13 @@
+-- RUN THIS BY HAND in the Supabase SQL editor, after deploying the attendance-reminder function.
+-- Replace YOUR_PROJECT_REF and YOUR_BACKUP_SECRET (the same secret used for the daily backup).
+-- 11:00 UTC = 11:00 AM in Ghana. Monday to Friday only.
+select cron.schedule(
+  'attendance-reminder-11am',
+  '0 11 * * 1-5',
+  $$ select net.http_post(
+       url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/attendance-reminder',
+       headers := '{"Content-Type":"application/json","x-backup-secret":"YOUR_BACKUP_SECRET"}'::jsonb,
+       body := '{}'::jsonb
+     ) $$
+);
+-- To stop it later:  select cron.unschedule('attendance-reminder-11am');

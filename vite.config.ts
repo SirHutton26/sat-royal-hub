@@ -9,7 +9,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      injectRegister: false, // main.tsx registers the app and checks for new versions itself
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',

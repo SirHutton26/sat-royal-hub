@@ -16,7 +16,7 @@ const BACKUP_TABLES = [
   'school_settings', 'profiles', 'classes', 'subjects', 'students', 'subject_assignments', 'non_teaching_staff',
   'fee_structures', 'fee_payments', 'fee_payment_sms', 'daily_fee_rates', 'daily_collections', 'daily_feeding',
   'weekly_class_fee_remittances', 'attendance', 'staff_attendance', 'grades', 'exam_sessions', 'exam_scores',
-  'score_bank_entries', 'score_bank_scores', 'sba_configs', 'sba_results', 'alerts', 'audit_logs', 'sms_broadcasts', 'activity_log',
+  'score_bank_entries', 'score_bank_scores', 'store_items', 'store_sales', 'store_submissions', 'sba_configs', 'sba_results', 'alerts', 'audit_logs', 'sms_broadcasts', 'activity_log',
 ]
 // Restore order (parents before children). profiles/logs are never overwritten.
 const RESTORE_ORDER = BACKUP_TABLES.filter((t) => !['profiles', 'audit_logs', 'sms_broadcasts', 'activity_log'].includes(t))
@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
       if (!auth.user) return json({ error: 'Not signed in' }, 401)
       const { data: me } = await admin.from('profiles').select('role, is_active').eq('id', auth.user.id).maybeSingle()
       if (!me?.is_active || me.role !== 'admin') return json({ error: 'Not allowed' }, 403)
+      if (!(await mfaOk(admin, token, auth.user.id))) return json({ error: 'Two-step verification required' }, 401)
     }
 
     const body = await req.json().catch(() => ({}))
@@ -132,3 +133,16 @@ Deno.serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : 'Unexpected error' }, 500)
   }
 })
+
+/** True unless the account has an authenticator app but this login skipped the code step. */
+// deno-lint-ignore no-explicit-any
+async function mfaOk(client: any, token: string, userId: string) {
+  try {
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (claims.aal === 'aal2') return true
+    const { data } = await client.auth.admin.mfa.listFactors({ userId })
+    return !(data?.factors ?? []).some((f: { status: string }) => f.status === 'verified')
+  } catch {
+    return false
+  }
+}

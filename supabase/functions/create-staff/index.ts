@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
       .eq('id', caller.user.id)
       .single()
     if (callerProfile?.role !== 'admin' || !callerProfile.is_active) return json({ error: 'Only admins can create staff logins' }, 403)
+    if (!(await mfaOk(admin, token, caller.user!.id))) return json({ error: 'Two-step verification required' }, 401)
 
     const { fullName, email, password, position, phone } = await req.json()
     const mail = String(email ?? '').trim().toLowerCase()
@@ -43,7 +44,11 @@ Deno.serve(async (req) => {
       ? 'bursar'
       : /^\s*(sms|messenger|sms officer|communications?)\s*$/i.test(pos)
         ? 'messenger'
-        : 'staff'
+        : /^\s*head\s*-?\s*(teacher|master|mistress)\s*$/i.test(pos)
+          ? 'headteacher'
+          : /^\s*store\s*-?\s*keeper\s*$/i.test(pos)
+            ? 'storekeeper'
+            : 'staff'
 
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email: mail,
@@ -76,3 +81,16 @@ Deno.serve(async (req) => {
     return json({ error: (e as Error).message }, 500)
   }
 })
+
+/** True unless the account has an authenticator app but this login skipped the code step. */
+// deno-lint-ignore no-explicit-any
+async function mfaOk(client: any, token: string, userId: string) {
+  try {
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (claims.aal === 'aal2') return true
+    const { data } = await client.auth.admin.mfa.listFactors({ userId })
+    return !(data?.factors ?? []).some((f: { status: string }) => f.status === 'verified')
+  } catch {
+    return false
+  }
+}

@@ -54,7 +54,7 @@ const POSITION_SUGGESTIONS = [
   'Gardener',
 ]
 
-const ROLE_LABEL: Record<string, string> = { admin: 'Admin', teacher: 'Teacher', bursar: 'Bursar', messenger: 'SMS Officer', staff: 'Staff' }
+const ROLE_LABEL: Record<string, string> = { admin: 'Admin', teacher: 'Teacher', bursar: 'Bursar', messenger: 'SMS Officer', headteacher: 'Headteacher', storekeeper: 'Store-keeper', staff: 'Staff' }
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-royal-500 focus:ring-2 focus:ring-royal-100'

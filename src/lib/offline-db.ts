@@ -37,6 +37,7 @@ export interface CredRow {
   iter: number
   profile: unknown
   ts: number
+  mfa?: boolean
 }
 
 export const db = new Dexie('sat-hub') as Dexie & {
@@ -77,7 +78,7 @@ async function derive(password: string, salt: Uint8Array, iter: number) {
   return b64(bits)
 }
 
-export async function saveCred(email: string, userId: string, password: string, profile: unknown) {
+export async function saveCred(email: string, userId: string, password: string, profile: unknown, mfa = false) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const iter = 150000
   await db.creds.put({
@@ -88,6 +89,7 @@ export async function saveCred(email: string, userId: string, password: string, 
     iter,
     profile,
     ts: Date.now(),
+    mfa,
   })
 }
 

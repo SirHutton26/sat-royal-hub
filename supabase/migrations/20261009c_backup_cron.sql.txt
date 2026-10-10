@@ -1,0 +1,15 @@
+-- RUN THIS BY HAND in the Supabase SQL editor after:
+--   1) Database -> Extensions: enable "pg_cron" and "pg_net"
+--   2) supabase secrets set BACKUP_SECRET=<a long random text you choose>
+--   3) deploying the backup-data function
+-- Replace YOUR_PROJECT_REF and YOUR_BACKUP_SECRET below (same text as step 2). 12:00 UTC = 12 noon in Ghana.
+select cron.schedule(
+  'daily-noon-backup',
+  '0 12 * * *',
+  $$ select net.http_post(
+       url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/backup-data',
+       headers := '{"Content-Type":"application/json","x-backup-secret":"YOUR_BACKUP_SECRET"}'::jsonb,
+       body := '{"action":"run","kind":"auto"}'::jsonb
+     ) $$
+);
+-- To stop it later:  select cron.unschedule('daily-noon-backup');

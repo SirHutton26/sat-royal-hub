@@ -17,6 +17,8 @@ const HOME_BY_ROLE: Record<Role, string> = {
   teacher: '/teacher',
   bursar: '/bursar',
   messenger: '/messenger',
+  headteacher: '/headteacher',
+  storekeeper: '/storekeeper',
 }
 
 export function RequireRole({ role }: { role: Role }) {

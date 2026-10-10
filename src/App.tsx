@@ -7,6 +7,7 @@ import IdleLogout from '@/components/auth/idle-logout'
 import PwaPrompts from '@/components/pwa/pwa-prompts'
 import SyncManager from '@/components/offline/sync-manager'
 import ActivityTracker from '@/components/activity/activity-tracker'
+import UpdatePrompt from '@/components/pwa/update-prompt'
 import TeacherMasterResult from './pages/teacher/TeacherMasterResult'
 
 const AdminLayout = lazy(() => import('@/pages/admin/admin-layout'))
@@ -26,6 +27,20 @@ const AdminArrears = lazy(() => import('@/pages/admin/admin-arrears'))
 const AdminDailyRates = lazy(() => import('@/pages/admin/admin-daily-rates'))
 const AdminNonStaff = lazy(() => import('@/pages/admin/admin-non-staff'))
 
+const HeadteacherLayout = lazy(() => import('@/pages/staff-portal/headteacher-layout'))
+const StorekeeperLayout = lazy(() => import('@/pages/staff-portal/storekeeper-layout'))
+const HeadteacherDashboard = lazy(() => import('@/pages/headteacher/headteacher-dashboard'))
+const HeadteacherStudents = lazy(() => import('@/pages/headteacher/headteacher-students'))
+const HeadteacherFees = lazy(() => import('@/pages/headteacher/headteacher-fees'))
+const HeadteacherAlerts = lazy(() => import('@/pages/headteacher/headteacher-alerts'))
+const HeadteacherStaffReport = lazy(() => import('@/pages/headteacher/headteacher-staff-report'))
+const HeadteacherResults = lazy(() => import('@/pages/headteacher/headteacher-results'))
+const HeadteacherToday = lazy(() => import('@/pages/headteacher/headteacher-today'))
+const HeadteacherReportCards = lazy(() => import('@/pages/headteacher/headteacher-report-cards'))
+const StorekeeperToday = lazy(() => import('@/pages/storekeeper/storekeeper-today'))
+const StorekeeperWeekly = lazy(() => import('@/pages/storekeeper/storekeeper-weekly'))
+const StorekeeperItems = lazy(() => import('@/pages/storekeeper/storekeeper-items'))
+const PortalClockIn = lazy(() => import('@/pages/staff-portal/portal-clock-in'))
 const MessengerLayout = lazy(() => import('@/pages/messenger/messenger-layout'))
 const MessengerCompose = lazy(() => import('@/pages/messenger/messenger-compose'))
 const MessengerHistory = lazy(() => import('@/pages/messenger/messenger-history'))
@@ -66,6 +81,7 @@ export default function App() {
         <PwaPrompts />
         <SyncManager />
         <ActivityTracker />
+        <UpdatePrompt />
         <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -81,6 +97,7 @@ export default function App() {
                 <Route path="settings" element={<AdminSettings />} />
                 <Route path="staff-attendance" element={<AdminStaffAttendance />} />
                 <Route path="fees" element={<AdminFees />} />
+                <Route path="store" element={<StorekeeperWeekly />} />
                 <Route path="data-house" element={<AdminDataHouse />} />
                 <Route path="activity-log" element={<AdminActivityLog />} />
                 <Route path="fees/arrears" element={<AdminArrears />} />
@@ -89,6 +106,30 @@ export default function App() {
               </Route>
             </Route>
 
+            <Route element={<RequireRole role="headteacher" />}>
+              <Route path="/headteacher" element={<HeadteacherLayout />}>
+                <Route index element={<HeadteacherDashboard />} />
+                <Route path="attendance" element={<HeadteacherToday />} />
+                <Route path="alerts" element={<HeadteacherAlerts />} />
+                <Route path="staff-report" element={<HeadteacherStaffReport />} />
+                <Route path="results" element={<HeadteacherResults />} />
+                <Route path="students" element={<HeadteacherStudents />} />
+                <Route path="fees" element={<HeadteacherFees />} />
+                <Route path="store" element={<StorekeeperWeekly />} />
+                <Route path="report-cards" element={<HeadteacherReportCards />} />
+                <Route path="clock-in" element={<PortalClockIn />} />
+                <Route path="settings" element={<BursarSettings />} />
+              </Route>
+            </Route>
+            <Route element={<RequireRole role="storekeeper" />}>
+              <Route path="/storekeeper" element={<StorekeeperLayout />}>
+                <Route index element={<StorekeeperToday />} />
+                <Route path="week" element={<StorekeeperWeekly />} />
+                <Route path="items" element={<StorekeeperItems />} />
+                <Route path="clock-in" element={<PortalClockIn />} />
+                <Route path="settings" element={<BursarSettings />} />
+              </Route>
+            </Route>
             <Route element={<RequireRole role="messenger" />}>
               <Route path="/messenger" element={<MessengerLayout />}>
                 <Route index element={<MessengerCompose />} />

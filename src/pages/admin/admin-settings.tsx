@@ -3,6 +3,7 @@ import { AlertCircle, Camera, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, User
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import OfflineDownload from '@/components/offline/offline-download'
+import MfaSetup from '@/components/security/mfa-setup'
 
 const MIN_PASSWORD = 8
 const inputClass =
@@ -213,6 +214,8 @@ export default function AdminSettings() {
           {pwBusy && <Loader2 className="h-4 w-4 animate-spin" />} Change password
         </button>
       </form>
+
+      <MfaSetup />
 
       <OfflineDownload />
     </div>

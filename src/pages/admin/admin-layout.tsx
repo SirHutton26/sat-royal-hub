@@ -17,6 +17,7 @@ import {
   Wallet,
   UserCog,
   Database,
+  Store,
   History,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -34,6 +35,7 @@ const navItems = [
   { label: 'Alerts', to: '/admin/alerts', icon: Megaphone },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
   { label: 'Fees', to: '/admin/fees', icon: Wallet },
+  { label: 'Store', to: '/admin/store', icon: Store },
   { label: 'Data House', to: '/admin/data-house', icon: Database },
   { label: 'Activity Log', to: '/admin/activity-log', icon: History },
 ]

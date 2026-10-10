@@ -31,7 +31,7 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
 sw.addEventListener('message', ((e: { data?: { type?: string } }) => {
   if (e.data?.type === 'SKIP_WAITING') sw.skipWaiting()
 }) as never)
-sw.skipWaiting()
+// A new version waits until the app asks for it (the "Update now" button, or when the app is reopened)
 sw.addEventListener('activate', ((e: SwEvent) => e.waitUntil(sw.clients.claim())) as never)
 
 sw.addEventListener('push', ((e: PushEv) => {

@@ -12,6 +12,8 @@ interface Props {
 function portalFor(position: string) {
   if (/^\s*bursar\s*$/i.test(position)) return 'Bursar (fees portal)'
   if (/^\s*(sms|messenger|sms officer|communications?)\s*$/i.test(position)) return 'SMS Officer (messaging portal)'
+  if (/^\s*head\s*-?\s*(teacher|master|mistress)\s*$/i.test(position)) return 'Headteacher portal'
+  if (/^\s*store\s*-?\s*keeper\s*$/i.test(position)) return 'Store-keeper portal'
   return 'Staff'
 }
 

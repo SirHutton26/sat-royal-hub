@@ -7,6 +7,7 @@ import { IDLE_NOTICE_KEY } from '@/components/auth/idle-logout'
 import { Mail, Lock, Eye, EyeOff, ShieldAlert, X } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
+import MfaChallenge from '@/components/auth/mfa-challenge'
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
@@ -21,6 +22,8 @@ const HOME_BY_ROLE: Record<string, string> = {
   teacher: '/teacher',
   bursar: '/bursar',
   messenger: '/messenger',
+  headteacher: '/headteacher',
+  storekeeper: '/storekeeper',
 }
 
 function BrandHeading() {
@@ -108,7 +111,7 @@ function WaveBackground() {
 }
 
 export default function LoginPage() {
-  const { profile, signIn } = useAuth()
+  const { profile, signIn, mfaPending, verifyMfa, cancelMfa } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [showForgot, setShowForgot] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
@@ -177,6 +180,9 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {mfaPending ? (
+        <MfaChallenge onVerify={verifyMfa} onCancel={() => void cancelMfa()} />
+      ) : (
       <form
         onSubmit={handleSubmit(onSubmit)}
         noValidate
@@ -272,6 +278,7 @@ export default function LoginPage() {
           Sign in
         </button>
       </form>
+      )}
 
       <p className="relative z-10 mt-6 text-xs text-royal-100/80">© SAT ROYAL BASIC SCHOOL</p>
 

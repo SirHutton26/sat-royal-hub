@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, Loader2, Eye, Ban, X, AlertCircle, CheckCircle2, Banknote, Smartphone, Landmark } from 'lucide-react'
+import { Search, Loader2, Eye, Ban, X, AlertCircle, CheckCircle2, Banknote, Smartphone, Landmark, FileDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   admissionNo,
@@ -11,6 +11,7 @@ import {
 } from '@/components/fees/fee-utils'
 import ReceiptModal from '@/components/fees/receipt-modal'
 import ProvisionalReceipts from '@/components/offline/provisional-receipts'
+import { buildReceiptSheetPdf } from '@/lib/receipt-sheet-pdf'
 
 /* ---------- types ---------- */
 
@@ -62,6 +63,8 @@ export default function BursarReceipts() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'valid' | 'void'>('all')
 
   const [receipt, setReceipt] = useState<Receipt | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [building, setBuilding] = useState(false)
   const [opening, setOpening] = useState(false)
 
   const [toVoid, setToVoid] = useState<PaymentRow | null>(null)
@@ -125,6 +128,59 @@ export default function BursarReceipts() {
   }, [rows])
   const grandTotal = totals.cash + totals.mobile_money + totals.bank
   const voidCount = rows.filter((r) => r.status === 'void').length
+
+  /* ----- print official receipts, 6 per A4 sheet ----- */
+  const printable = visible.filter((r) => r.status === 'valid')
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+
+  async function printSheet() {
+    const chosen = printable.filter((r) => selected.has(r.id)).sort((a, b) => a.paid_at.localeCompare(b.paid_at))
+    if (chosen.length === 0) return
+    setBuilding(true)
+    // Balance after each payment = fee item amount minus everything paid up to that payment
+    const ids = [...new Set(chosen.map((r) => r.student_id))]
+    const { data, error } = await supabase
+      .from('fee_payments')
+      .select('student_id, fee_structure_id, amount, paid_at')
+      .in('student_id', ids)
+      .eq('status', 'valid')
+    if (error) {
+      setBuilding(false)
+      return showToast('error', error.message)
+    }
+    const paid = data ?? []
+    const receipts: Receipt[] = chosen.map((r) => {
+      const so_far = paid
+        .filter((p) => p.student_id === r.student_id && p.fee_structure_id === r.fee_structure_id && p.paid_at <= r.paid_at)
+        .reduce((sum, p) => sum + Number(p.amount), 0)
+      return {
+        receiptNo: r.receipt_no,
+        paidAt: r.paid_at,
+        amount: r.amount,
+        method: r.method,
+        reference: r.reference,
+        item: r.fee_structures?.item ?? '',
+        term: r.fee_structures?.term ?? '',
+        year: r.fee_structures?.academic_year ?? '',
+        studentName: r.students ? studentName(r.students) : 'Unknown student',
+        admissionNo: r.students ? admissionNo(r.students) : '',
+        className: r.students?.classes?.name ?? '',
+        balanceAfter: Number(r.fee_structures?.amount ?? 0) - so_far,
+        receivedBy: r.received?.full_name || 'Bursar',
+        status: r.status,
+        voidReason: r.void_reason,
+      }
+    })
+    buildReceiptSheetPdf(receipts)
+    setBuilding(false)
+    showToast('ok', `${receipts.length} receipt${receipts.length === 1 ? '' : 's'} on ${Math.ceil(receipts.length / 6)} sheet${receipts.length > 6 ? 's' : ''}`)
+  }
 
   /* ----- view / reprint ----- */
   async function openReceipt(r: PaymentRow) {
@@ -249,11 +305,41 @@ export default function BursarReceipts() {
         </select>
       </div>
 
+      {/* Print 6 official receipts per A4 sheet */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 text-sm shadow-sm">
+        <span className="text-gray-600">
+          <b>{selected.size}</b> selected{selected.size > 0 && ` - ${Math.ceil(selected.size / 6)} A4 sheet${selected.size > 6 ? 's' : ''}`}
+        </span>
+        <button onClick={() => setSelected(new Set(printable.map((r) => r.id)))} className="rounded-lg border border-royal-200 px-3 py-1.5 font-semibold text-royal-700 hover:bg-royal-50">
+          Select all shown
+        </button>
+        {selected.size > 0 && (
+          <button onClick={() => setSelected(new Set())} className="rounded-lg px-3 py-1.5 font-medium text-gray-500 hover:bg-gray-100">
+            Clear
+          </button>
+        )}
+        <button
+          onClick={printSheet}
+          disabled={selected.size === 0 || building}
+          className="ml-auto flex items-center gap-2 rounded-lg bg-royal-600 px-4 py-1.5 font-semibold text-white hover:bg-royal-700 disabled:opacity-50"
+        >
+          {building ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} Print receipts (6 per A4, PDF)
+        </button>
+      </div>
+
       {/* Table */}
       <div className="mt-4 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-royal-600 text-white">
             <tr>
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select all"
+                  checked={printable.length > 0 && printable.every((r) => selected.has(r.id))}
+                  onChange={(e) => setSelected(e.target.checked ? new Set(printable.map((r) => r.id)) : new Set())}
+                />
+              </th>
               <th className="px-4 py-3 font-semibold">Receipt</th>
               <th className="px-4 py-3 font-semibold">Date</th>
               <th className="px-4 py-3 font-semibold">Student</th>
@@ -266,13 +352,13 @@ export default function BursarReceipts() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : visible.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                   No payments found for this period.
                 </td>
               </tr>
@@ -281,6 +367,9 @@ export default function BursarReceipts() {
                 const isVoid = r.status === 'void'
                 return (
                   <tr key={r.id} className={`border-t border-gray-100 ${isVoid ? 'bg-red-50/40' : 'hover:bg-royal-50/60'}`}>
+                    <td className="px-4 py-3">
+                      {!isVoid && <input type="checkbox" aria-label="Select receipt" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} />}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-royal-900">
                       {r.receipt_no}
                       {isVoid && (

@@ -37,7 +37,7 @@ export default function AdminStaffAttendance() {
     async function load() {
       setLoading(true)
       const [teachersRes, recordsRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role').in('role', ['teacher', 'bursar']).eq('is_active', true).order('full_name'),
+        supabase.from('profiles').select('id, full_name, email, role').in('role', ['teacher', 'bursar', 'headteacher', 'storekeeper']).eq('is_active', true).order('full_name'),
         supabase.from('staff_attendance').select('teacher_id, clock_in_at, clock_out_at, status').eq('date', date),
       ])
       if (!active) return
@@ -222,7 +222,7 @@ export default function AdminStaffAttendance() {
                   <tr key={t.id} className="border-b border-gray-50 last:border-0 hover:bg-royal-50/30">
                     <td className="px-4 py-3 font-medium text-royal-900">
                       {t.full_name || t.email}
-                      {t.role === 'bursar' && <span className="ml-2 text-xs font-normal text-gray-400">Bursar</span>}
+                      {t.role !== 'teacher' && <span className="ml-2 text-xs font-normal capitalize text-gray-400">{t.role === 'storekeeper' ? 'Store-keeper' : t.role}</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {r?.clock_in_at ? new Date(r.clock_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}

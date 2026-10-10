@@ -10,6 +10,8 @@ const QUEUE_TABLES = new Set([
   'daily_collections',
   'daily_feeding',
   'weekly_class_fee_remittances',
+  'store_sales',
+  'store_submissions',
   'fee_payments',
 ])
 // Everything else (payments, creating/deleting records, settings) needs a connection
