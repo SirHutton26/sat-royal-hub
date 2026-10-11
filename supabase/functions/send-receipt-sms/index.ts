@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
     if (!auth.user) return json({ error: 'Not signed in' }, 401)
     const { data: caller } = await admin.from('profiles').select('role, is_active, full_name, username, email').eq('id', auth.user.id).maybeSingle()
     if (!caller || !caller.is_active || !['bursar', 'admin'].includes(caller.role)) return json({ error: 'Not allowed' }, 403)
+    if (!(await mfaOk(admin, token, auth.user.id))) return json({ error: 'Two-step verification required' }, 401)
 
     const { receipt_no } = await req.json()
     if (!receipt_no) return json({ error: 'receipt_no is required' }, 400)
@@ -77,25 +78,31 @@ Deno.serve(async (req) => {
       return json({ sent: false, reason: 'Guardian phone number is not valid' })
     }
 
-    // All of this student's fee items: this term's breakdown plus any unpaid earlier terms
-    const { data: bals } = await admin
-      .from('student_fee_balances')
-      .select('item, academic_year, term, balance')
-      .eq('student_id', pay.student_id)
+    // What the parent still owes: this term's fee items, plus ARREARS (everything left from earlier terms,
+    // including the "Opening balance"). Arrears are added into the total.
+    const [{ data: bals }, { data: set }] = await Promise.all([
+      admin.from('student_fee_balances').select('item, academic_year, term, balance').eq('student_id', pay.student_id),
+      admin.from('school_settings').select('current_academic_year, current_term').limit(1).maybeSingle(),
+    ])
     const key = (y: string, t: string) => `${y}|${t}`
-    const thisKey = key(fee?.academic_year ?? '', fee?.term ?? '')
+    const paidKey = key(fee?.academic_year ?? '', fee?.term ?? '')
+    const settingsKey = key(set?.current_academic_year ?? '', set?.current_term ?? '')
+    // the current term, or the paid term if someone pays ahead
+    const nowKey = paidKey > settingsKey ? paidKey : settingsKey
     const rows = (bals ?? []).map((r) => ({ ...r, balance: Math.max(Number(r.balance ?? 0), 0), k: key(r.academic_year, r.term) }))
-    const current = rows.filter((r) => r.k === thisKey).sort((x, y) => x.item.localeCompare(y.item))
-    const arrears = rows.filter((r) => r.k < thisKey).reduce((sum, r) => sum + r.balance, 0)
+    const current = rows.filter((r) => r.k === nowKey).sort((x, y) => x.item.localeCompare(y.item))
+    const arrears = rows.filter((r) => r.k < nowKey).reduce((sum, r) => sum + r.balance, 0)
     const total = current.reduce((sum, r) => sum + r.balance, 0) + arrears
 
+    // Parents know the "Opening balance" as Arrears
+    const label = (item: string) => (/opening\s*balance/i.test(item) ? 'Arrears' : item)
     const name = (student.full_name ?? 'your ward').replace(/\s+/g, ' ').trim()
     // "GHS" instead of the cedi sign keeps the text in plain GSM-7
     const lines = [
-      `SAT ROYAL BASIC SCHOOL: Received ${cedis(Number(pay.amount))} for ${name} (${fee?.item ?? 'fees'}, ${fee?.term ?? ''} ${fee?.academic_year ?? ''}).`,
+      `SAT ROYAL BASIC SCHOOL: Received ${cedis(Number(pay.amount))} for ${name} (${label(fee?.item ?? 'fees')}, ${fee?.term ?? ''} ${fee?.academic_year ?? ''}).`,
       `Balance breakdown:`,
-      ...current.map((r) => `${r.item}: ${cedis(r.balance)}`),
-      ...(arrears > 0 ? [`Arrears: ${cedis(arrears)}`] : []),
+      ...current.map((r) => `${label(r.item)}: ${cedis(r.balance)}`),
+      `Arrears: ${cedis(arrears)}`,
       `Total balance: ${cedis(total)}`,
       `Receipt ${receipt_no}. Thank you.`,
     ]
@@ -137,3 +144,16 @@ Deno.serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : 'Unexpected error' }, 500)
   }
 })
+
+/** True unless the account has an authenticator app but this login skipped the code step. */
+// deno-lint-ignore no-explicit-any
+async function mfaOk(client: any, token: string, userId: string) {
+  try {
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (claims.aal === 'aal2') return true
+    const { data } = await client.auth.admin.mfa.listFactors({ userId })
+    return !(data?.factors ?? []).some((f: { status: string }) => f.status === 'verified')
+  } catch {
+    return false
+  }
+}

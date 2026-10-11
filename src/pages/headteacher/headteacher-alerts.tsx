@@ -57,7 +57,7 @@ export default function HeadteacherAlerts() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<{ total: number; withPhone: number } | null>(null)
-  const [result, setResult] = useState<{ recipients: number; pushSent: number; smsSent: number; smsFailed: number; noPhone: number } | null>(null)
+  const [result, setResult] = useState<{ recipients: number; pushSent: number; pushDevices: number; pushError: string | null; smsSent: number; smsFailed: number; noPhone: number } | null>(null)
   const [past, setPast] = useState<Past[]>([])
 
   const loadPast = useCallback(async () => {
@@ -166,6 +166,11 @@ export default function HeadteacherAlerts() {
             Sent to {result.recipients} staff. {result.pushSent} phone notification(s), {result.smsSent} SMS delivered
             {result.smsFailed ? `, ${result.smsFailed} SMS failed` : ''}
             {result.noPhone ? `, ${result.noPhone} have no phone number saved` : ''}.
+            {push && result.pushSent === 0 && (
+              <span className="mt-1 block text-amber-700">
+                {result.pushError ?? (result.pushDevices === 0 ? 'No phone notification was sent because none of these staff have turned on notifications in the app yet. They can do this from the "Get school alerts" banner inside the installed app.' : '')}
+              </span>
+            )}
           </span>
         </p>
       )}

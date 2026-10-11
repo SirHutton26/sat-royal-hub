@@ -66,11 +66,18 @@ export async function sendSmsEach(items: { phone: string; text: string }[]) {
 /** Phone notification to the devices of the given users; dead subscriptions are removed */
 // deno-lint-ignore no-explicit-any
 export async function pushToUsers(admin: any, userIds: string[], payload: { title: string; body: string; url: string }) {
-  if (!userIds.length) return 0
+  return (await pushToUsersDetailed(admin, userIds, payload)).sent
+}
+
+/** Same, but also says how many phones were registered, so "0 sent" can be explained */
+// deno-lint-ignore no-explicit-any
+export async function pushToUsersDetailed(admin: any, userIds: string[], payload: { title: string; body: string; url: string }) {
+  if (!userIds.length) return { sent: 0, devices: 0, failed: 0 }
   webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
   const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').in('user_id', userIds)
   const body = JSON.stringify(payload)
   let sent = 0
+  let failed = 0
   const dead: string[] = []
   await Promise.all(
     // deno-lint-ignore no-explicit-any
@@ -79,11 +86,12 @@ export async function pushToUsers(admin: any, userIds: string[], payload: { titl
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body)
         sent++
       } catch (e) {
+        failed++
         const code = (e as { statusCode?: number }).statusCode
         if (code === 404 || code === 410) dead.push(s.id)
       }
     }),
   )
   if (dead.length) await admin.from('push_subscriptions').delete().in('id', dead)
-  return sent
+  return { sent, devices: (subs ?? []).length, failed }
 }

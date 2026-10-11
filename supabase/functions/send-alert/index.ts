@@ -1,6 +1,6 @@
 // The headteacher (or admin) sends an alert to staff: it appears on their dashboard, goes to their phones, and is texted.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { cors, json, normalisePhone, pushToUsers, sendSmsSame } from '../_shared/notify.ts'
+import { cors, json, normalisePhone, pushToUsersDetailed, sendSmsSame } from '../_shared/notify.ts'
 
 const STAFF_ROLES = ['teacher', 'bursar', 'headteacher', 'storekeeper', 'staff', 'messenger']
 
@@ -51,11 +51,17 @@ Deno.serve(async (req) => {
     if (aErr) return json({ error: aErr.message }, 500)
 
     let pushSent = 0
+    let pushDevices = 0
+    let pushError: string | null = null
     if (body.push !== false) {
       try {
-        pushSent = await pushToUsers(admin, ids, { title, body: message.length > 140 ? message.slice(0, 137) + '...' : message, url: '/teacher/alerts' })
-      } catch {
-        /* the alert is still on their dashboards */
+        const r = await pushToUsersDetailed(admin, ids, { title, body: message.length > 140 ? message.slice(0, 137) + '...' : message, url: '/teacher/alerts' })
+        pushSent = r.sent
+        pushDevices = r.devices
+        if (r.devices > 0 && r.sent === 0) pushError = 'The phones were found but the notification was refused. They may need to open the app and turn notifications on again.'
+      } catch (e) {
+        // the alert is still on their dashboards
+        pushError = e instanceof Error ? `Phone notifications are not set up on the server (${e.message})` : 'Phone notifications failed'
       }
     }
 
@@ -79,7 +85,7 @@ Deno.serve(async (req) => {
     }
 
     await admin.from('alerts').update({ push_sent: pushSent, sms_sent: smsSent, sms_failed: smsFailed }).eq('id', alert.id)
-    return json({ recipients: ids.length, pushSent, smsSent, smsFailed, noPhone: ids.length - phones.length })
+    return json({ recipients: ids.length, pushSent, pushDevices, pushError, smsSent, smsFailed, noPhone: ids.length - phones.length })
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Unexpected error' }, 500)
   }
