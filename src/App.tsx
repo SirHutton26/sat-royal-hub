@@ -26,6 +26,7 @@ const AdminFees = lazy(() => import('@/pages/admin/admin-fees'))
 const AdminArrears = lazy(() => import('@/pages/admin/admin-arrears'))
 const AdminDailyRates = lazy(() => import('@/pages/admin/admin-daily-rates'))
 const AdminNonStaff = lazy(() => import('@/pages/admin/admin-non-staff'))
+const AdminEarlierPayments = lazy(() => import('@/pages/admin/admin-earlier-payments'))
 
 const HeadteacherLayout = lazy(() => import('@/pages/staff-portal/headteacher-layout'))
 const StorekeeperLayout = lazy(() => import('@/pages/staff-portal/storekeeper-layout'))
@@ -101,6 +102,7 @@ export default function App() {
                 <Route path="data-house" element={<AdminDataHouse />} />
                 <Route path="activity-log" element={<AdminActivityLog />} />
                 <Route path="fees/arrears" element={<AdminArrears />} />
+                <Route path="earlier-payments" element={<AdminEarlierPayments />} />
                 <Route path="non-staff" element={<AdminNonStaff />} />
                 <Route path="daily-rates" element={<AdminDailyRates />} />
               </Route>

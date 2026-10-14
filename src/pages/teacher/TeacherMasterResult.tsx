@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, Eye, AlertCircle, Users, BarChart3, Trophy, ClipboardList } from 'lucide-react'
+import { ArrowLeft, FilePlus2, History, Download, Eye, AlertCircle, Users, BarChart3, Trophy, ClipboardList } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import MasterResultReport from './MasterResultReport'
+import { aggregate, orderSubjects } from '@/lib/master-result'
 
 const TERMS = ['Term 1', 'Term 2', 'Term 3']
 
@@ -33,8 +34,15 @@ interface MasterRow {
   complete: boolean
   total: number | null
   average: number | null
+  agg: number | null
   grade: string | null
   position: number | null
+}
+
+interface RecentTerm {
+  term: string
+  subjects: number
+  exams: string[]
 }
 
 type SortMode = 'name' | 'position'
@@ -120,6 +128,11 @@ export default function TeacherMasterResult() {
   const [term, setTerm] = useState(TERMS[0])
   const [sort, setSort] = useState<SortMode>('name')
   const [showReport, setShowReport] = useState(false)
+  // landing choice: New Results (current term) or Recent Results (earlier terms that already have results)
+  const [view, setView] = useState<'menu' | 'new' | 'recent'>('menu')
+  const [currentTerm, setCurrentTerm] = useState(TERMS[0])
+  const [recent, setRecent] = useState<RecentTerm[]>([])
+  const [examNames, setExamNames] = useState<string[]>([])
 
   const [students, setStudents] = useState<Student[]>([])
   const [subjectNames, setSubjectNames] = useState<string[]>([])
@@ -137,7 +150,12 @@ export default function TeacherMasterResult() {
         .select('id, name, level_group')
         .eq('teacher_id', profile.id)
         .maybeSingle()
+      const { data: st } = await supabase.from('school_settings').select('current_term').limit(1).maybeSingle()
       if (!active) return
+      if (st?.current_term && TERMS.includes(st.current_term)) {
+        setCurrentTerm(st.current_term)
+        setTerm(st.current_term)
+      }
       setMyClass(data ?? null)
       setLoadingClass(false)
     }
@@ -146,6 +164,54 @@ export default function TeacherMasterResult() {
       active = false
     }
   }, [profile])
+
+  // Earlier terms that already have saved results, with the exam each one was for
+  const examNamesFor = async (classId: string, t?: string) => {
+    let q = supabase.from('sba_configs').select('term, exam_session_id').eq('class_id', classId)
+    if (t) q = q.eq('term', t)
+    const { data: cfg } = await q
+    const ids = [...new Set((cfg ?? []).map((c) => c.exam_session_id).filter(Boolean))] as string[]
+    const { data: sess } = ids.length ? await supabase.from('exam_sessions').select('id, exam_type').in('id', ids) : { data: [] }
+    const type = new Map((sess ?? []).map((x) => [x.id, x.exam_type as string]))
+    const out = new Map<string, Set<string>>()
+    for (const c of cfg ?? []) {
+      const n = c.exam_session_id ? type.get(c.exam_session_id) : undefined
+      if (n) out.set(c.term, (out.get(c.term) ?? new Set()).add(n))
+    }
+    return out
+  }
+
+  useEffect(() => {
+    if (!myClass) return
+    let active = true
+    void (async () => {
+      const [{ data: res }, names] = await Promise.all([
+        supabase.from('sba_results').select('term, subject').eq('class_id', myClass.id),
+        examNamesFor(myClass.id),
+      ])
+      if (!active) return
+      const byTerm = new Map<string, Set<string>>()
+      for (const r of res ?? []) byTerm.set(r.term, (byTerm.get(r.term) ?? new Set()).add(r.subject))
+      setRecent(
+        [...byTerm.entries()]
+          .filter(([t]) => t !== currentTerm)
+          .sort((a, b) => b[0].localeCompare(a[0]))
+          .map(([t, subs]) => ({ term: t, subjects: subs.size, exams: [...(names.get(t) ?? [])] })),
+      )
+    })()
+    return () => {
+      active = false
+    }
+  }, [myClass, currentTerm])
+
+  useEffect(() => {
+    if (!myClass) return
+    let active = true
+    void examNamesFor(myClass.id, term).then((m) => active && setExamNames([...(m.get(term) ?? [])]))
+    return () => {
+      active = false
+    }
+  }, [myClass, term])
 
   // 2. Load students, subjects and saved SBA results whenever the class or term changes
   useEffect(() => {
@@ -186,7 +252,7 @@ export default function TeacherMasterResult() {
 
   const sheet = useMemo(() => {
     const withResults = new Set(results.map((r) => r.subject))
-    const subjects = Array.from(new Set([...subjectNames, ...withResults])).sort((a, b) => a.localeCompare(b))
+    const subjects = orderSubjects(Array.from(new Set([...subjectNames, ...withResults])))
     // Only subjects that have saved results count towards totals and positions
     const activeSubjects = subjects.filter((s) => withResults.has(s))
     const missingSubjects = subjects.filter((s) => !withResults.has(s))
@@ -206,7 +272,9 @@ export default function TeacherMasterResult() {
 
       const count = activeSubjects.filter((sub) => scores[sub] !== null).length
       const complete = activeSubjects.length > 0 && count === activeSubjects.length
-      const total = complete ? round2(activeSubjects.reduce((sum, sub) => sum + (scores[sub] as number), 0)) : null
+      // a missing result ("—") counts as 0, so every student is totalled and ranked
+      const hasAny = activeSubjects.length > 0
+      const total = hasAny ? round2(activeSubjects.reduce((sum, sub) => sum + (scores[sub] ?? 0), 0)) : null
       const average = total !== null ? round2(total / activeSubjects.length) : null
 
       return {
@@ -218,12 +286,13 @@ export default function TeacherMasterResult() {
         complete,
         total,
         average,
+        agg: hasAny ? aggregate(activeSubjects, scores) : null,
         grade: average !== null ? gradeFor(average) : null,
         position: null,
       }
     })
 
-    // Positions are only given to students who have a result in every subject; equal totals share a position
+    // Every student is ranked (missing results count as 0); equal totals share a position
     const ranked = rows.filter((r) => r.total !== null).sort((a, b) => (b.total as number) - (a.total as number))
     let lastTotal: number | null = null
     let lastPosition = 0
@@ -241,7 +310,7 @@ export default function TeacherMasterResult() {
       subjectAverages[sub] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null
     }
 
-    const completeRows = rows.filter((r) => r.complete)
+    const completeRows = rows.filter((r) => r.total !== null)
     const classAverage =
       completeRows.length > 0 ? completeRows.reduce((sum, r) => sum + (r.average as number), 0) / completeRows.length : null
     const toppers = rows.filter((r) => r.position === 1).map((r) => r.name)
@@ -252,11 +321,13 @@ export default function TeacherMasterResult() {
       activeCount: activeSubjects.length,
       missingSubjects,
       subjectAverages,
-      completeCount: completeRows.length,
+      completeCount: rows.filter((r) => r.complete).length,
       classAverage,
       toppers,
     }
   }, [students, subjectNames, results])
+
+  const examLabel = examNames.length ? examNames.join(' & ') : `${term} Exam`
 
   const displayRows = useMemo(() => {
     if (sort === 'name') return sheet.rows
@@ -270,13 +341,14 @@ export default function TeacherMasterResult() {
 
   function downloadCsv() {
     if (!myClass) return
-    const header = ['SN', 'Name', 'Admission No', ...sheet.subjects, 'Total', 'Average', 'Grade', 'Position']
+    const header = ['SN', 'Name', 'Admission No', ...sheet.subjects, 'Total', 'Agg.', 'Average', 'Grade', 'Position']
     const lines = displayRows.map((r, i) => [
       i + 1,
       r.name,
       r.admission,
       ...sheet.subjects.map((s) => (r.scores[s] !== null ? (r.scores[s] as number).toFixed(1) : '')),
       r.total !== null ? r.total.toFixed(1) : '',
+      r.agg ?? '',
       r.average !== null ? r.average.toFixed(1) : '',
       r.grade ?? '',
       r.position ?? '',
@@ -306,17 +378,62 @@ export default function TeacherMasterResult() {
     )
   }
 
-  const colCount = sheet.subjects.length + 6
+  const colCount = sheet.subjects.length + 7
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-royal-900">Master Result · {myClass.name}</h1>
+      {view !== 'menu' && (
+        <button onClick={() => setView('menu')} className="mb-2 flex items-center gap-1 text-sm font-medium text-royal-600 hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Master Result
+        </button>
+      )}
+      <h1 className="text-xl font-semibold text-royal-900">
+        {view === 'menu' ? 'Master Result' : view === 'new' ? 'New Results' : 'Recent Results'} · {myClass.name}
+        {view !== 'menu' && <span className="text-gray-400"> · {term} · {examLabel}</span>}
+      </h1>
       <p className="mt-1 text-sm text-gray-500">
-        Every subject's saved SBA for your class in one sheet. Totals and positions are out of the subjects that have results.
+        Every subject's saved SBA for your class in one sheet. A missing result ("—") counts as 0, and every student is ranked.
       </p>
 
+      {view === 'menu' && (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <button
+            onClick={() => { setTerm(currentTerm); setView('new') }}
+            className="rounded-2xl p-6 text-left text-white shadow-sm transition hover:shadow-md"
+            style={{ background: 'linear-gradient(120deg, #1E3FBF 0%, #0F1F63 100%)' }}
+          >
+            <FilePlus2 className="h-8 w-8 text-gold-400" />
+            <p className="mt-3 text-lg font-bold">New Results</p>
+            <p className="mt-1 text-sm text-royal-100">{currentTerm}: build the master sheet and report from the latest saved SBA.</p>
+          </button>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <History className="h-8 w-8 text-gold-500" />
+            <p className="mt-3 text-lg font-bold text-royal-900">Recent Results</p>
+            {recent.length === 0 ? (
+              <p className="mt-1 text-sm text-gray-500">No earlier term has saved results yet.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-gray-100">
+                {recent.map((r) => (
+                  <li key={r.term}>
+                    <button
+                      onClick={() => { setTerm(r.term); setView('recent') }}
+                      className="flex w-full items-center justify-between py-2 text-left text-sm hover:text-royal-600"
+                    >
+                      <span className="font-semibold text-royal-900">{r.term}{r.exams.length ? ` · ${r.exams.join(' & ')}` : ''}</span>
+                      <span className="text-xs text-gray-500">{r.subjects} subject{r.subjects === 1 ? '' : 's'}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {view !== 'menu' && (<>
+
       <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div>
+        {view === 'new' && <div>
           <label className="block text-xs font-medium text-gray-500">Term</label>
           <select
             value={term}
@@ -329,7 +446,7 @@ export default function TeacherMasterResult() {
               </option>
             ))}
           </select>
-        </div>
+        </div>}
 
         <div>
           <label className="block text-xs font-medium text-gray-500">Order</label>
@@ -350,7 +467,7 @@ export default function TeacherMasterResult() {
 
         <button
           onClick={() => setShowReport(true)}
-          disabled={loadingData || sheet.completeCount === 0}
+          disabled={loadingData || sheet.activeCount === 0}
           className="ml-auto flex items-center gap-2 rounded-md bg-royal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-royal-700 disabled:opacity-50"
         >
           <Eye className="h-4 w-4" />
@@ -435,6 +552,7 @@ export default function TeacherMasterResult() {
                 )
               })}
               <th className="px-3 py-3 text-center">Total</th>
+              <th className="px-3 py-3 text-center">Agg.</th>
               <th className="px-3 py-3 text-center">Avg</th>
               <th className="px-3 py-3 text-center">Grade</th>
               <th className="px-3 py-3 text-center">Position</th>
@@ -479,6 +597,7 @@ export default function TeacherMasterResult() {
                   <td className="px-3 py-3 text-center font-semibold text-royal-900">
                     {r.total !== null ? r.total.toFixed(1) : '—'}
                   </td>
+                  <td className="px-3 py-3 text-center font-semibold text-royal-900">{r.agg ?? '—'}</td>
                   <td className="px-3 py-3 text-center text-gray-600">{r.average !== null ? r.average.toFixed(1) : '—'}</td>
                   <td className="px-3 py-3 text-center">
                     {r.grade ? (
@@ -510,17 +629,20 @@ export default function TeacherMasterResult() {
                     {sheet.subjectAverages[s] !== null ? (sheet.subjectAverages[s] as number).toFixed(1) : '—'}
                   </td>
                 ))}
-                <td className="px-3 py-3" colSpan={4} />
+                <td className="px-3 py-3" colSpan={5} />
               </tr>
             </tfoot>
           )}
         </table>
       </div>
 
+      </>)}
+
       {showReport && (
         <MasterResultReport
           classLabel={myClass.name}
           term={term}
+          examName={examLabel}
           subjects={sheet.subjects}
           missingSubjects={sheet.missingSubjects}
           rows={sheet.rows}

@@ -18,6 +18,7 @@ interface TermPayment {
   amount: number
   method: Method
   paid_at: string
+  source?: string
 }
 
 interface RecentPayment {
@@ -103,7 +104,7 @@ export default function BursarDashboard() {
       const [termRes, balRes, recentRes] = await Promise.all([
         supabase
           .from('fee_payments')
-          .select('amount, method, paid_at, fee_structures!inner(term, academic_year)')
+          .select('amount, method, paid_at, source, fee_structures!inner(term, academic_year)')
           .eq('status', 'valid')
           .eq('fee_structures.academic_year', year)
           .eq('fee_structures.term', term),
@@ -138,7 +139,7 @@ export default function BursarDashboard() {
 
   const stats = useMemo(() => {
     const today = startOfToday().getTime()
-    const collectedToday = termPayments.filter((p) => new Date(p.paid_at).getTime() >= today).reduce((s, p) => s + p.amount, 0)
+    const collectedToday = termPayments.filter((p) => p.source !== 'before_system' && new Date(p.paid_at).getTime() >= today).reduce((s, p) => s + p.amount, 0)
     const collectedTerm = termPayments.reduce((s, p) => s + p.amount, 0)
 
     // A student is "owing" when their balance across all current-term items is above zero

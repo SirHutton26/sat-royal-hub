@@ -40,8 +40,8 @@ export default function HeadteacherFees() {
       supabase.from('classes').select('id, name').order('name'),
       fetchAll<{ id: string; class_id: string }>((a, b) => supabase.from('students').select('id, class_id').eq('is_active', true).range(a, b)),
       fetchAll<Bal>((a, b) => supabase.from('student_fee_balances').select('student_id, academic_year, term, amount_due, amount_paid, balance').range(a, b)),
-      supabase.from('fee_payments').select('receipt_no, amount, paid_at, method, students(full_name, classes(name))').eq('status', 'valid').order('paid_at', { ascending: false }).limit(10),
-      supabase.from('fee_payments').select('amount, paid_at').eq('status', 'valid').gte('paid_at', weekStart),
+      supabase.from('fee_payments').select('receipt_no, amount, paid_at, method, students(full_name, classes(name))').eq('status', 'valid').neq('source', 'before_system').order('paid_at', { ascending: false }).limit(10),
+      supabase.from('fee_payments').select('amount, paid_at').eq('status', 'valid').neq('source', 'before_system').gte('paid_at', weekStart),
     ]).then(([s, c, st, b, r, w]) => {
       setYear(s.data?.current_academic_year ?? '')
       setTerm(s.data?.current_term ?? '')

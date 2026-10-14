@@ -23,6 +23,7 @@ interface PaymentRow {
   amount: number
   method: Method
   paid_at: string
+  source?: string
 }
 
 const inputClass =
@@ -102,7 +103,7 @@ export default function BursarReports() {
           .eq('term', term),
         supabase
           .from('fee_payments')
-          .select('amount, method, paid_at, fee_structures!inner(academic_year, term)')
+          .select('amount, method, paid_at, source, fee_structures!inner(academic_year, term)')
           .eq('status', 'valid')
           .eq('fee_structures.academic_year', year)
           .eq('fee_structures.term', term),
@@ -177,6 +178,7 @@ export default function BursarReports() {
       })
     }
     for (const p of payments) {
+      if (p.source === 'before_system') continue // not collected on these days
       const day = days.find((d) => d.key === new Date(p.paid_at).toLocaleDateString('en-CA'))
       if (day) day.total += p.amount
     }

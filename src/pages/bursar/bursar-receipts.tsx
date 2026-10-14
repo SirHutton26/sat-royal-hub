@@ -27,6 +27,7 @@ interface PaymentRow {
   void_reason: string | null
   student_id: string
   fee_structure_id: string
+  source?: string
   students: ({ classes: { name: string } | null } & Record<string, unknown>) | null
   fee_structures: { item: string; term: string; academic_year: string; amount: number } | null
   received: { full_name: string | null } | null
@@ -84,7 +85,7 @@ export default function BursarReceipts() {
     let q = supabase
       .from('fee_payments')
       .select(
-        'id, receipt_no, amount, method, reference, note, paid_at, status, void_reason, student_id, fee_structure_id, ' +
+        'id, receipt_no, amount, method, reference, note, paid_at, status, void_reason, student_id, fee_structure_id, source, ' +
           'students(*, classes(name)), fee_structures(item, term, academic_year, amount), ' +
           'received:profiles!fee_payments_received_by_fkey(full_name)',
       )
@@ -123,14 +124,15 @@ export default function BursarReceipts() {
   // Totals count valid payments only, so voided money never inflates the figures
   const totals = useMemo(() => {
     const t: Record<Method, number> = { cash: 0, mobile_money: 0, bank: 0 }
-    for (const r of rows) if (r.status === 'valid') t[r.method] += r.amount
+    // earlier (before-system) payments are not today's takings; they only count under "All time"
+    for (const r of rows) if (r.status === 'valid' && (r.source !== 'before_system' || range === 'all')) t[r.method] += r.amount
     return t
-  }, [rows])
+  }, [rows, range])
   const grandTotal = totals.cash + totals.mobile_money + totals.bank
   const voidCount = rows.filter((r) => r.status === 'void').length
 
   /* ----- print official receipts, 6 per A4 sheet ----- */
-  const printable = visible.filter((r) => r.status === 'valid')
+  const printable = visible.filter((r) => r.status === 'valid' && r.source !== 'before_system')
   const toggleOne = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev)
@@ -372,6 +374,7 @@ export default function BursarReceipts() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-royal-900">
                       {r.receipt_no}
+                      {r.source === 'before_system' && <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 font-sans text-[10px] font-semibold text-amber-700">Before system</span>}
                       {isVoid && (
                         <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 font-sans text-[10px] font-semibold uppercase text-red-600">
                           Void

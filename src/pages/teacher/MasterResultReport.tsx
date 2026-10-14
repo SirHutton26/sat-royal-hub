@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, Download } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
+import schoolLogo from '@/assets/school-logo.png'
 
 export interface ReportRow {
   studentId: string
@@ -10,12 +11,14 @@ export interface ReportRow {
   complete: boolean
   total: number | null
   average: number | null
+  agg: number | null
   position: number | null
 }
 
 interface Props {
   classLabel: string
   term: string
+  examName: string
   subjects: string[]
   missingSubjects: string[]
   rows: ReportRow[]
@@ -135,12 +138,14 @@ function termInfo(term: string) {
   return { label: `End of ${ordinal(n)} Term`, next: n >= 3 ? 'Term 1 (Next Academic Year)' : `Term ${n + 1}` }
 }
 
-function buildReport(subjects: string[], missing: string[], rows: ReportRow[]) {
+function buildReport(subjects: string[], missing: string[], rawRows: ReportRow[]) {
+  // a missing result (—) counts as 0
+  const rows = rawRows
   const active = subjects.filter((s) => !missing.includes(s))
 
   const subjectStats: SubjectStat[] = active
     .map((name) => {
-      const vals = rows.map((r) => r.scores[name]).filter((v): v is number => v !== null && v !== undefined)
+      const vals = rows.map((r) => r.scores[name] ?? 0)
       const pass = vals.filter((v) => v >= PASS_MARK).length
       return {
         name,
@@ -332,10 +337,10 @@ function Page({ n, total, footer, children }: { n: number; total: number; footer
   )
 }
 
-export default function MasterResultReport({ classLabel, term, subjects, missingSubjects, rows, onClose }: Props) {
+export default function MasterResultReport({ classLabel, term, examName, subjects, missingSubjects, rows, onClose }: Props) {
   const { profile } = useAuth()
   const scale = useFitScale()
-  const info = termInfo(term)
+  const info = { ...termInfo(term), label: examName }
   const data = useMemo(() => buildReport(subjects, missingSubjects, rows), [subjects, missingSubjects, rows])
 
   useEffect(() => {
@@ -349,7 +354,7 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
   function downloadPdf() {
     const previous = document.title
     // Browsers use the page title as the default PDF file name
-    document.title = `${classLabel}-Master-Result-${term}`.replace(/\s+/g, '-')
+    document.title = `${classLabel}-Master-Result-${term}-${examName}`.replace(/\s+/g, '-')
     const restore = () => {
       document.title = previous
       window.removeEventListener('afterprint', restore)
@@ -365,7 +370,7 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
   const weakest = byAverage[byAverage.length - 1]
   const below = data.bandCounts[4]
   const classSize = rows.length
-  const incomplete = classSize - data.completeCount
+  const incomplete = rows.filter((r) => r.complete === false).length
 
   const chunks: ReportRow[][] = []
   for (let i = 0; i < data.sheetRows.length; i += ROWS_PER_PAGE) chunks.push(data.sheetRows.slice(i, i + ROWS_PER_PAGE))
@@ -438,7 +443,7 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <p className="hidden truncate text-sm font-semibold text-royal-900 sm:block">
-          {classLabel} · {term} report
+          {classLabel} · {term} · {examName} report
         </p>
         <button
           onClick={downloadPdf}
@@ -452,29 +457,33 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
       <div className="mr-zoom py-4" style={{ zoom: scale }}>
         {/* ---------- PAGE 1: overview ---------- */}
         <Page n={1} total={totalPages} footer={footerText}>
-          <div
-            className="rounded-lg px-6 py-5 text-white"
-            style={{ background: 'linear-gradient(120deg, #1e3a8a 0%, #172554 55%, #0f172a 100%)' }}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-[22px] font-extrabold tracking-wide">SAT ROYAL BASIC SCHOOL</h1>
-                <p className="mt-1 text-[12px] text-blue-200">
-                  {classLabel} — {info.label} Class Performance Report
-                </p>
+          <div className="overflow-hidden rounded-lg" style={{ background: 'linear-gradient(120deg, #1E3FBF 0%, #1832A0 50%, #0F1F63 100%)' }}>
+            <div className="flex items-center justify-between gap-4 px-6 py-5 text-white">
+              <div className="flex items-center gap-4">
+                <img src={schoolLogo} alt="" className="h-16 w-16 shrink-0 rounded-full bg-white object-contain p-1" style={{ boxShadow: '0 0 0 3px #FFD60A' }} />
+                <div>
+                  <h1 className="text-[22px] font-extrabold tracking-wide">SAT ROYAL BASIC SCHOOL</h1>
+                  <p className="mt-1 text-[12px] font-semibold" style={{ color: '#FFD60A' }}>
+                    {classLabel} — {examName} Class Performance Report
+                  </p>
+                </div>
               </div>
               <div className="shrink-0 text-right text-[11px] leading-5">
                 <p>
-                  <b>Academic Session:</b> <span className="text-blue-100">{info.label}</span>
+                  <b style={{ color: '#FFD60A' }}>Exam:</b> <span className="text-blue-50">{examName}</span>
                 </p>
                 <p>
-                  <b>Class Size:</b> <span className="text-blue-100">{classSize} Students</span>
+                  <b style={{ color: '#FFD60A' }}>Term:</b> <span className="text-blue-50">{term}</span>
                 </p>
                 <p>
-                  <b>Total Subjects:</b> <span className="text-blue-100">{data.active.length} Subjects</span>
+                  <b style={{ color: '#FFD60A' }}>Class Size:</b> <span className="text-blue-50">{classSize} Students</span>
+                </p>
+                <p>
+                  <b style={{ color: '#FFD60A' }}>Total Subjects:</b> <span className="text-blue-50">{data.active.length} Subjects</span>
                 </p>
               </div>
             </div>
+            <div style={{ height: 6, background: 'linear-gradient(90deg, #FFD60A, #E6BE00)' }} />
           </div>
 
           <div className="mt-3 grid grid-cols-4 gap-2">
@@ -495,8 +504,8 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
 
           {incomplete > 0 && (
             <p className="mt-2 text-[9.5px] italic text-slate-500">
-              Overall figures use the {data.completeCount} of {classSize} students who have results in all {data.active.length}{' '}
-              subjects.
+              {incomplete} of {classSize} students have no result in at least one of the {data.active.length} subjects. Those
+              results count as 0 in all figures.
             </p>
           )}
 
@@ -617,6 +626,7 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
                     </th>
                   ))}
                   <th className="border border-slate-600 px-1.5 py-1.5 text-center font-semibold">Total</th>
+                  <th className="border border-slate-600 px-1.5 py-1.5 text-center font-semibold">Agg.</th>
                   <th className="border border-slate-600 px-1.5 py-1.5 text-center font-semibold">Average</th>
                 </tr>
               </thead>
@@ -633,6 +643,7 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
                     <td className="border border-slate-200 px-1.5 py-[3px] text-center font-bold">
                       {r.total !== null ? fmt(r.total) : '—'}
                     </td>
+                    <td className="border border-slate-200 px-1.5 py-[3px] text-center font-bold">{r.agg ?? '—'}</td>
                     <td className="border border-slate-200 px-1.5 py-[3px] text-center font-bold">
                       {r.average !== null ? `${r.average.toFixed(1)}%` : '—'}
                     </td>
@@ -652,7 +663,8 @@ export default function MasterResultReport({ classLabel, term, subjects, missing
                     ))}
                   </p>
                 )}
-                {incomplete > 0 && <p>Students marked “—” are missing a result in at least one subject and are not ranked.</p>}
+                {incomplete > 0 && <p>Students marked “—” are missing a result in that subject. “—” counts as 0 and the student is still ranked.</p>}
+                <p>Agg. (aggregate) = grades (1 best to 9) of English, Maths, Science and Social Studies plus the best two other subjects. Lower is better.</p>
               </div>
             )}
           </Page>

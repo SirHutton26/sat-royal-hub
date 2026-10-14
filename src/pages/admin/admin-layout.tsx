@@ -19,6 +19,7 @@ import {
   Database,
   Store,
   History,
+  ClipboardList,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -35,6 +36,7 @@ const navItems = [
   { label: 'Alerts', to: '/admin/alerts', icon: Megaphone },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
   { label: 'Fees', to: '/admin/fees', icon: Wallet },
+  { label: 'Earlier Payments', to: '/admin/earlier-payments', icon: ClipboardList },
   { label: 'Store', to: '/admin/store', icon: Store },
   { label: 'Data House', to: '/admin/data-house', icon: Database },
   { label: 'Activity Log', to: '/admin/activity-log', icon: History },
@@ -42,7 +44,7 @@ const navItems = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav className="flex flex-1 flex-col gap-1 p-3">
+    <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
       {navItems.map((item) => (
         <NavLink
           key={item.label}
@@ -96,7 +98,7 @@ export default function AdminLayout() {
     .toUpperCase()
 
   return (
-    <div className="min-h-screen bg-royal-50">
+    <div className="flex h-screen flex-col overflow-hidden bg-royal-50">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col bg-gradient-to-b from-royal-600 to-royal-700 md:flex">
         <div className="flex items-center gap-2 px-4 py-4">
@@ -117,7 +119,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="flex items-center justify-between bg-gradient-to-r from-royal-600 to-royal-700 px-4 py-3 md:hidden">
+      <header className="flex shrink-0 items-center justify-between bg-gradient-to-r from-royal-600 to-royal-700 px-4 py-3 md:hidden">
         <div className="flex items-center gap-2">
           <img src={schoolLogo} alt="" className="h-8 w-8 rounded-full bg-white object-contain p-1" />
           <span className="text-sm font-bold text-white">SAT ROYAL HUB</span>
@@ -155,8 +157,8 @@ export default function AdminLayout() {
       )}
 
       {/* Page content */}
-      <div className="md:ml-60">
-        <div className="hidden items-center justify-between border-b border-royal-100 bg-white px-6 py-3 md:flex">
+      <div className="flex min-h-0 flex-1 flex-col md:ml-60">
+        <div className="hidden shrink-0 items-center justify-between border-b border-royal-100 bg-white px-6 py-3 md:flex">
           <p className="text-sm text-gray-500">Welcome back,</p>
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-royal-900">
@@ -167,7 +169,7 @@ export default function AdminLayout() {
             </span>
           </div>
         </div>
-        <main className="p-4 md:p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           <Outlet />
         </main>
       </div>
