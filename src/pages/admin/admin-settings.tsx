@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import OfflineDownload from '@/components/offline/offline-download'
 import MfaSetup from '@/components/security/mfa-setup'
+import TermDatesSettings from '@/components/settings/term-dates-settings'
 
 const MIN_PASSWORD = 8
 const inputClass =
@@ -214,6 +215,8 @@ export default function AdminSettings() {
           {pwBusy && <Loader2 className="h-4 w-4 animate-spin" />} Change password
         </button>
       </form>
+
+      <TermDatesSettings />
 
       <MfaSetup />
 

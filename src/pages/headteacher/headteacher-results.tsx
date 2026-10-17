@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { TERMS } from '@/lib/report-card'
 import { fetchAll } from '@/lib/headteacher'
+import { aggregate, orderSubjects } from '@/lib/master-result'
 
 interface R {
   student_id: string
@@ -48,32 +49,49 @@ export default function HeadteacherResults() {
   const data = useMemo(() => {
     if (!results) return null
     const name = new Map(students.map((s) => [s.id, s.full_name]))
-    const active = new Set(students.map((s) => s.id))
-    const scores = new Map<string, { classId: string; totals: number[] }>()
+    // per class: the subjects that have saved results, and each student's scores (missing = 0, as on the Master Result)
+    const byClassSubj = new Map<string, Set<string>>()
+    const scoreOf = new Map<string, Record<string, number>>()
     for (const r of results) {
-      if (r.total_score === null || !active.has(r.student_id)) continue
-      const e = scores.get(r.student_id) ?? { classId: r.class_id, totals: [] }
-      e.totals.push(Number(r.total_score))
-      scores.set(r.student_id, e)
+      if (r.total_score === null) continue
+      byClassSubj.set(r.class_id, (byClassSubj.get(r.class_id) ?? new Set()).add(r.subject))
+      const m = scoreOf.get(r.student_id) ?? {}
+      m[r.subject] = Number(r.total_score)
+      scoreOf.set(r.student_id, m)
     }
-    const people = [...scores.entries()].map(([id, e]) => ({ id, name: name.get(id) ?? '', classId: e.classId, average: avg(e.totals), subjects: e.totals.length }))
+    const people: { id: string; name: string; classId: string; average: number; total: number; agg: number | null; complete: boolean; hasAny: boolean }[] = []
+    for (const c of classes) {
+      const subs = orderSubjects([...(byClassSubj.get(c.id) ?? [])])
+      if (!subs.length) continue
+      for (const st of students.filter((x) => x.class_id === c.id)) {
+        const sc = scoreOf.get(st.id) ?? {}
+        const total = subs.reduce((t, sub) => t + (sc[sub] ?? 0), 0)
+        people.push({
+          id: st.id, name: name.get(st.id) ?? '', classId: c.id, total, average: total / subs.length,
+          agg: aggregate(subs, sc), complete: subs.every((sub) => sc[sub] !== undefined), hasAny: subs.some((sub) => sc[sub] !== undefined),
+        })
+      }
+    }
     const byClass = classes.map((c) => {
-      const mine = people.filter((p) => p.classId === c.id).sort((a, b) => b.average - a.average)
-      return { c, count: mine.length, roll: students.filter((s) => s.class_id === c.id).length, average: avg(mine.map((p) => p.average)), top: mine.slice(0, 3), best: mine[0]?.average ?? 0 }
+      const mine = people.filter((p) => p.classId === c.id).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+      return { c, count: mine.filter((p) => p.complete).length, roll: students.filter((s) => s.class_id === c.id).length, hasResults: mine.length > 0, average: avg(mine.map((p) => p.average)), top: mine.slice(0, 3), best: mine[0]?.average ?? 0 }
     })
     const school = [...people].sort((a, b) => b.average - a.average).slice(0, 10)
-    return { byClass, school, schoolAvg: avg(people.map((p) => p.average)), graded: people.length }
+    return { byClass, school, schoolAvg: avg(people.map((p) => p.average)), graded: people.filter((p) => p.hasAny).length }
   }, [results, students, classes])
 
   const subjectRows = useMemo(() => {
     if (!results || !subjectClass) return []
-    const m = new Map<string, number[]>()
+    const roll = students.filter((x) => x.class_id === subjectClass).map((x) => x.id)
+    const m = new Map<string, Map<string, number>>()
     for (const r of results) {
       if (r.class_id !== subjectClass || r.total_score === null) continue
-      m.set(r.subject, [...(m.get(r.subject) ?? []), Number(r.total_score)])
+      const mm = m.get(r.subject) ?? new Map<string, number>()
+      mm.set(r.student_id, Number(r.total_score))
+      m.set(r.subject, mm)
     }
-    return [...m.entries()].map(([subject, xs]) => ({ subject, average: avg(xs), n: xs.length })).sort((a, b) => b.average - a.average)
-  }, [results, subjectClass])
+    return orderSubjects([...m.keys()]).map((subject) => ({ subject, average: avg(roll.map((id) => m.get(subject)?.get(id) ?? 0)), n: roll.length }))
+  }, [results, subjectClass, students])
 
   const className = (id: string) => classes.find((c) => c.id === id)?.name ?? ''
   const tone = (a: number) => (a >= 68 ? 'bg-green-500' : a >= 54 ? 'bg-gold-400' : a >= 40 ? 'bg-orange-500' : 'bg-red-500')
@@ -83,7 +101,7 @@ export default function HeadteacherResults() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-royal-900">Results overview</h1>
-          <p className="mt-1 text-sm text-gray-500">From the results teachers have saved on the SBA page.</p>
+          <p className="mt-1 text-sm text-gray-500">Same figures as each class's Master Result. A missing result counts as 0 and every student is ranked.</p>
         </div>
         <select value={term} onChange={(e) => setTerm(e.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
           {TERMS.map((t) => <option key={t}>{t}</option>)}
@@ -97,7 +115,7 @@ export default function HeadteacherResults() {
       ) : (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[['School average', f1(data.schoolAvg)], ['Students with results', data.graded], ['Best class', [...data.byClass].filter((x) => x.count).sort((a, b) => b.average - a.average)[0]?.c.name ?? '-'], ['Top student', data.school[0] ? `${data.school[0].name.split(' ')[0]} (${f1(data.school[0].average)})` : '-']].map(([k, v]) => (
+            {[['School average', f1(data.schoolAvg)], ['Students with results', data.graded], ['Best class', [...data.byClass].filter((x) => x.hasResults).sort((a, b) => b.average - a.average)[0]?.c.name ?? '-'], ['Top student', data.school[0] ? `${data.school[0].name.split(' ')[0]} (${f1(data.school[0].average)})` : '-']].map(([k, v]) => (
               <div key={String(k)} className="rounded-2xl bg-white p-4 shadow-sm">
                 <p className="text-xs font-medium text-gray-500">{k}</p>
                 <p className="mt-1 truncate text-lg font-bold text-royal-900">{v}</p>
@@ -107,7 +125,7 @@ export default function HeadteacherResults() {
 
           <section className="mt-5 overflow-x-auto rounded-2xl bg-white shadow-sm">
             <h2 className="px-4 pt-4 font-semibold text-royal-900">Class averages</h2>
-            <p className="px-4 text-xs text-gray-500">Tap a class to see its top 3 students.</p>
+            <p className="px-4 text-xs text-gray-500">Tap a class to see its top 3 students. “With results” counts students who have every subject saved.</p>
             <table className="mt-2 w-full min-w-[560px] text-left text-sm">
               <thead className="text-xs uppercase text-gray-500">
                 <tr><th className="px-4 py-2">Class</th><th className="px-2 py-2 text-right">With results</th><th className="px-2 py-2 text-right">Highest</th><th className="w-48 px-4 py-2">Class average</th></tr>
@@ -115,14 +133,14 @@ export default function HeadteacherResults() {
               <tbody>
                 {data.byClass.map((r) => (
                   <Fragment key={r.c.id}>
-                    <tr onClick={() => r.count && setOpen(open === r.c.id ? null : r.c.id)} className={`border-t border-gray-100 ${r.count ? 'cursor-pointer hover:bg-royal-50/60' : ''}`}>
+                    <tr onClick={() => r.hasResults && setOpen(open === r.c.id ? null : r.c.id)} className={`border-t border-gray-100 ${r.hasResults ? 'cursor-pointer hover:bg-royal-50/60' : ''}`}>
                       <td className="px-4 py-2.5 font-medium text-royal-900">
-                        <span className="flex items-center gap-1.5">{r.count ? open === r.c.id ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" /> : <span className="w-4" />}{r.c.name}</span>
+                        <span className="flex items-center gap-1.5">{r.hasResults ? open === r.c.id ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" /> : <span className="w-4" />}{r.c.name}</span>
                       </td>
                       <td className="px-2 py-2.5 text-right text-gray-600">{r.count}/{r.roll}</td>
-                      <td className="px-2 py-2.5 text-right text-gray-600">{r.count ? f1(r.best) : '-'}</td>
+                      <td className="px-2 py-2.5 text-right text-gray-600">{r.hasResults ? f1(r.best) : '-'}</td>
                       <td className="px-4 py-2.5">
-                        {r.count ? (
+                        {r.hasResults ? (
                           <div className="flex items-center gap-2">
                             <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100"><div className={`h-full rounded-full ${tone(r.average)}`} style={{ width: `${Math.min(100, r.average)}%` }} /></div>
                             <span className="w-10 text-right text-xs font-semibold text-royal-900">{f1(r.average)}</span>
@@ -134,7 +152,7 @@ export default function HeadteacherResults() {
                       <tr className="bg-gray-50">
                         <td colSpan={4} className="px-4 py-3 text-sm">
                           <ol className="space-y-1">
-                            {r.top.map((p, i) => <li key={p.id} className="flex justify-between"><span>{i + 1}. {p.name}</span><span className="font-semibold text-royal-900">{f1(p.average)}</span></li>)}
+                            {r.top.map((p, i) => <li key={p.id} className="flex justify-between"><span>{i + 1}. {p.name}</span><span className="font-semibold text-royal-900">{f1(p.average)}{p.agg !== null && <span className="ml-2 text-xs font-normal text-gray-500">Agg. {p.agg}</span>}</span></li>)}
                           </ol>
                         </td>
                       </tr>

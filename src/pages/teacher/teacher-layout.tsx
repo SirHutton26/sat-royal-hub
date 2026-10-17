@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronRight,
   Bell,
+  TrendingUp,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +24,7 @@ const navItems = [
   // { label: 'Score Bank', to: '/teacher/score-bank', icon: Database },
   // { label: 'Exams', to: '/teacher/exams', icon: FileText },
   // { label: 'SBA', to: '/teacher/sba', icon: ClipboardList },
+  { label: 'Performance', to: '/teacher/performance', icon: TrendingUp },
   { label: 'Clock In', to: '/teacher/clock-in', icon: QrCode },
 ]
 

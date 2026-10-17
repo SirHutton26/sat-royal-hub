@@ -74,10 +74,10 @@ export const isBasic9 = (className: string) => /(basic|class|b)\s*-?\s*9\b/i.tes
 const gradeOf = (total: number, jhs9: boolean) => (jhs9 ? JHS9 : AE).find((g) => total >= g.min) ?? (jhs9 ? JHS9 : AE)[(jhs9 ? JHS9 : AE).length - 1]
 
 // The four core subjects counted in the Basic 9 aggregate
-const CORE = [/english/i, /math/i, /int(egrated)?\.?\s*sci/i, /social/i]
+const CORE = [/english/i, /math/i, /science/i, /social/i]
 
 // Order used on the school's printed report card
-const ORDER = [/english/i, /math/i, /int.*sci|integrated/i, /social/i, /r\.?m\.?e|religious/i, /comput|ict/i, /b\.?d\.?t|design/i, /ghana/i, /french/i, /creative/i, /natural/i, /environ/i, /o\.?w\.?o\.?p|our world/i, /literacy/i, /history/i, /writing/i]
+const ORDER = [/english/i, /math/i, /sci/i, /social/i, /r\.?m\.?e|religious/i, /comput|ict/i, /b\.?d\.?t|design/i, /ghana/i, /french/i, /creative/i, /natural/i, /environ/i, /o\.?w\.?o\.?p|our world/i, /literacy/i, /history/i, /writing/i]
 const rank = (n: string) => {
   const i = ORDER.findIndex((re) => re.test(n))
   return i === -1 ? 99 : i
@@ -154,7 +154,8 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
     const mine = bySt.get(s.id)
     const rows: CardSubject[] = subjects.map((sub) => {
       const r = mine?.get(sub)
-      const total = r?.total_score != null ? Number(r.total_score) : null
+      // a subject that has saved results but none for this student counts as 0 (same rule as the Master Result)
+      const total = r?.total_score != null ? Number(r.total_score) : withResults.has(sub) ? 0 : null
       const g = total !== null ? gradeOf(total, jhs9) : null
       return {
         subject: sub,
@@ -200,7 +201,7 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
   })
 
   // Overall position by total score (ties share a position)
-  const ranked = cards.filter((c) => c.average !== null).sort((a, b) => b.total - a.total)
+  const ranked = cards.filter((c) => c.average !== null).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
   let last = -1
   let pos = 0
   ranked.forEach((c, i) => {

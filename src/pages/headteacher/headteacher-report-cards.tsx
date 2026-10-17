@@ -69,7 +69,7 @@ export default function HeadteacherReportCards() {
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-bold text-royal-900">Report Cards</h1>
-      <p className="mt-1 text-sm text-gray-500">Choose a class and term, then download the report cards as an A4 PDF (one page per student).</p>
+      <p className="mt-1 text-sm text-gray-500">Choose a class and term, then download the report cards as an A4 PDF (one page per student). A subject with no result for a student counts as 0, and every student is ranked.</p>
 
       <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm font-medium text-royal-900">

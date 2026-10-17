@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { localISO } from '@/lib/attendance'
 import { ROLE_LABEL, STAFF_ROLES, fetchAll, type Staff } from '@/lib/headteacher'
 import { addDays, monday } from '@/lib/store'
+import { useTermDates } from '@/lib/terms'
 
 interface Rec {
   teacher_id: string
@@ -31,6 +32,7 @@ const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${St
 export default function HeadteacherStaffReport() {
   const today = localISO()
   const [preset, setPreset] = useState<Preset>('week')
+  const { term: adminTerm } = useTermDates()
   const [termStart, setTermStart] = useState(() => localStorage.getItem('sat-term-start') ?? '')
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
@@ -45,9 +47,9 @@ export default function HeadteacherStaffReport() {
       return { from: localISO(m), to: localISO(addDays(m, 4)) }
     }
     if (preset === 'month') return { from: `${today.slice(0, 7)}-01`, to: today }
-    if (preset === 'term') return { from: termStart || today, to: today }
+    if (preset === 'term') return { from: adminTerm?.start_date ?? (termStart || today), to: adminTerm && adminTerm.end_date < today ? adminTerm.end_date : today }
     return { from, to }
-  }, [preset, termStart, from, to, today])
+  }, [preset, termStart, adminTerm, from, to, today])
 
   useEffect(() => {
     let alive = true
@@ -115,7 +117,10 @@ export default function HeadteacherStaffReport() {
           </button>
         ))}
       </div>
-      {preset === 'term' && (
+      {preset === 'term' && adminTerm && (
+        <p className="mt-3 text-sm text-gray-600">{adminTerm.term}, {adminTerm.academic_year} (dates set by the admin)</p>
+      )}
+      {preset === 'term' && !adminTerm && (
         <label className="mt-3 block text-sm text-gray-600">
           Term started on
           <input type="date" value={termStart} max={today} onChange={(e) => { setTermStart(e.target.value); localStorage.setItem('sat-term-start', e.target.value) }} className="ml-2 rounded-lg border border-gray-300 px-3 py-1.5" />

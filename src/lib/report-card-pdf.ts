@@ -28,6 +28,11 @@ const COLS: { label: string; sub: string; w: number; align: 'left' | 'center' }[
 const num = (n: number | null) => (n === null ? '' : String(Math.round(n * 10) / 10))
 
 function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
+  // Washed-out school logo behind everything
+  doc.saveGraphicsState()
+  doc.setGState(new (doc as unknown as { GState: new (o: { opacity: number }) => unknown }).GState({ opacity: 0.07 }) as never)
+  doc.addImage(logo, 'PNG', 105 - 55, 150 - 55, 110, 110)
+  doc.restoreGraphicsState()
   doc.setTextColor(30, 30, 30)
 
   // ---- Header
@@ -95,7 +100,7 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
   y += headH
 
   const rows = c.subjects
-  const maxBody = 117 // mm available for rows
+  const maxBody = 85 // mm available for rows
   const rowH = Math.min(7.2, maxBody / Math.max(rows.length, 1))
   const bodySize = rowH < 5.5 ? 7 : 8
   rows.forEach((r) => {
@@ -135,9 +140,19 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
     }
     y += 8
   }
-  if (o.jhs9) line('BEST OF AGGREGATES:', c.aggregate ? `${c.aggregate.total}   (${c.aggregate.parts})` : '')
-  line("Class Teacher's Remarks:")
-  line("Head Teacher's Remarks:")
+  // a remark gets three dotted lines for handwriting
+  const remark = (label: string) => {
+    line(label)
+    y -= 1
+    for (let i = 0; i < 2; i++) {
+      dotted(doc, M, M + W, y + 1)
+      y += 7
+    }
+    y += 1
+  }
+  if (o.jhs9) line('BEST OF AGGREGATES:', c.aggregate ? String(c.aggregate.total) : '')
+  remark("Class Teacher's Remarks:")
+  remark("Head Teacher's Remarks:")
 
   // ---- Fees reminder
   y += 3
@@ -177,7 +192,8 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
 
   doc.setFont('helvetica', 'italic')
   doc.setFontSize(8)
-  doc.text("Parent's/Guardian's sign: ____________________", M + W, 297 - M, { align: 'right' })
+  doc.text("Class Teacher's sign: ____________________", M, 297 - M)
+  doc.text("Headteacher's sign: ____________________", M + W, 297 - M, { align: 'right' })
 }
 
 /** One A4 page per student */

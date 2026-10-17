@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Printer } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { localISO } from '@/lib/attendance'
+import { isHoliday, useTermDates } from '@/lib/terms'
 import schoolLogo from '@/assets/school-logo.png'
 
 type Status = 'present' | 'absent' | 'late'
@@ -34,6 +35,7 @@ const short = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}`
 
 export default function TeacherAttendanceTerm() {
   const { profile } = useAuth()
+  const { term: adminTerm, holidays } = useTermDates()
   const [classId, setClassId] = useState<string | null>(null)
   const [className, setClassName] = useState('')
   const [students, setStudents] = useState<Student[]>([])
@@ -79,13 +81,19 @@ export default function TeacherAttendanceTerm() {
     }
   }, [profile])
 
-  const startDate = useMemo(() => (start ? monday(new Date(start + 'T00:00:00')) : null), [start])
+  // the admin's term dates win over anything saved on this device
+  const termStartIso = adminTerm?.start_date ?? start
+  const startDate = useMemo(() => (termStartIso ? monday(new Date(termStartIso + 'T00:00:00')) : null), [termStartIso])
+  const termWeeks = useMemo(() => {
+    if (!adminTerm || new Date(adminTerm.end_date + 'T23:59:59') >= new Date()) return weeks
+    return Math.floor((monday(new Date(adminTerm.end_date + 'T00:00:00')).getTime() - monday(new Date(adminTerm.start_date + 'T00:00:00')).getTime()) / (7 * 86400000)) + 1
+  }, [adminTerm, weeks])
   const weekCount = useMemo(() => {
     if (!startDate) return 0
-    if (weeks > 0) return weeks
+    if (termWeeks > 0) return termWeeks
     const diff = Math.floor((monday(new Date()).getTime() - startDate.getTime()) / (7 * 86400000)) + 1
     return Math.min(Math.max(diff, 1), 16)
-  }, [startDate, weeks])
+  }, [startDate, termWeeks])
 
   // attendance for the whole period (paged: the API returns at most 1000 rows at a time)
   useEffect(() => {
@@ -150,7 +158,7 @@ export default function TeacherAttendanceTerm() {
   const termTotal = summary.reduce((a, r) => a + r.total, 0)
 
   const cell = 'border border-gray-700 text-center text-[10px] leading-tight'
-  const shade = (d: Date) => (openDays.has(localISO(d)) ? '' : 'bg-gray-200')
+  const shade = (d: Date) => (openDays.has(localISO(d)) ? '' : isHoliday(localISO(d), holidays) ? 'bg-amber-100' : 'bg-gray-200')
 
   if (!profile) return null
   return (
@@ -161,13 +169,14 @@ export default function TeacherAttendanceTerm() {
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <h1 className="mt-2 text-xl font-semibold text-royal-900">Term Attendance Register</h1>
-        <p className="mt-1 text-sm text-gray-500">Printable register in the traditional book layout: / present, L late (counted present), O absent, grey = no register taken.</p>
+        <p className="mt-1 text-sm text-gray-500">Printable register in the traditional book layout: / present, L late (counted present), O absent, grey = no register taken, yellow = holiday.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3 rounded-xl bg-white p-3 shadow-sm">
           <label className="text-sm">
-            <span className="block text-xs font-medium text-gray-500">Term commencing (Monday)</span>
+            <span className="block text-xs font-medium text-gray-500">{adminTerm ? `${adminTerm.term} starts (set by admin)` : 'Term commencing (Monday)'}</span>
             <input
               type="date"
-              value={start}
+              disabled={!!adminTerm}
+              value={termStartIso}
               onChange={(e) => {
                 setStart(e.target.value)
                 localStorage.setItem('sat-term-start', e.target.value)

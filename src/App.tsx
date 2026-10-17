@@ -38,6 +38,9 @@ const HeadteacherStaffReport = lazy(() => import('@/pages/headteacher/headteache
 const HeadteacherResults = lazy(() => import('@/pages/headteacher/headteacher-results'))
 const HeadteacherToday = lazy(() => import('@/pages/headteacher/headteacher-today'))
 const HeadteacherReportCards = lazy(() => import('@/pages/headteacher/headteacher-report-cards'))
+const HeadteacherSummary = lazy(() => import('@/pages/headteacher/headteacher-summary'))
+const HeadteacherPerformance = lazy(() => import('@/pages/headteacher/headteacher-performance'))
+
 const StorekeeperToday = lazy(() => import('@/pages/storekeeper/storekeeper-today'))
 const StorekeeperWeekly = lazy(() => import('@/pages/storekeeper/storekeeper-weekly'))
 const StorekeeperItems = lazy(() => import('@/pages/storekeeper/storekeeper-items'))
@@ -73,6 +76,10 @@ const TeacherScoreBank = lazy(() => import('@/pages/teacher/teacher-score-bank')
 const TeacherSba = lazy(() => import('@/pages/teacher/teacher-sba'))
 const TeacherSbaPrint = lazy(() => import('@/pages/teacher/teacher-sba-print'))
 const TeacherFees = lazy(() => import('@/pages/teacher/teacher-fees'))
+const TeacherClockInSign = lazy(() => import('@/pages/teacher/teacher-clockin-sign'))
+const TeacherClockInHistory = lazy(() => import('@/pages/teacher/teacher-clockin-history'))
+const TeacherPerformance = lazy(() => import('@/pages/teacher/teacher-performance'))
+
 
 export default function App() {
   return (
@@ -117,8 +124,10 @@ export default function App() {
                 <Route path="results" element={<HeadteacherResults />} />
                 <Route path="students" element={<HeadteacherStudents />} />
                 <Route path="fees" element={<HeadteacherFees />} />
+                <Route path="summary" element={<HeadteacherSummary />} />
                 <Route path="store" element={<StorekeeperWeekly />} />
                 <Route path="report-cards" element={<HeadteacherReportCards />} />
+                <Route path="performance" element={<HeadteacherPerformance />} />
                 <Route path="clock-in" element={<PortalClockIn />} />
                 <Route path="settings" element={<BursarSettings />} />
               </Route>
@@ -173,6 +182,9 @@ export default function App() {
                 <Route path="sba/print" element={<TeacherSbaPrint />} />
                 <Route path="fees" element={<TeacherFees />} />
                 <Route path="/teacher/master-result" element={<TeacherMasterResult />} />
+                <Route path="clock-in/sign" element={<TeacherClockInSign />} />
+                <Route path="clock-in/history" element={<TeacherClockInHistory />} />
+                <Route path="performance" element={<TeacherPerformance />} />
               </Route>
             </Route>
 
