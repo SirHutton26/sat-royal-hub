@@ -158,7 +158,9 @@ export default function HeadteacherPerformance() {
   const [q, setQ] = useState('')
   const [classes, setClasses] = useState<Cls[]>([])
   const [students, setStudents] = useState<Stu[]>([])
-  const [recs, setRecs] = useState<Rec[] | null>(null)
+  const [sbaRecs, setSbaRecs] = useState<Rec[] | null>(null)
+  const [examRecs, setExamRecs] = useState<(Rec & { type: string })[]>([])
+  const [exam, setExam] = useState('') // '' = overall SBA total, otherwise an exam type
 
   useEffect(() => {
     supabase.from('school_settings').select('current_term').limit(1).maybeSingle().then(({ data }) => {
@@ -166,8 +168,30 @@ export default function HeadteacherPerformance() {
     })
     supabase.from('classes').select('id, name, level_group').order('name').then(({ data }) => setClasses((data ?? []) as Cls[]))
     fetchAll<Stu>((a, b) => supabase.from('students').select('id, full_name, class_id').eq('is_active', true).order('full_name').range(a, b)).then(setStudents)
-    fetchAll<Rec>((a, b) => supabase.from('sba_results').select('student_id, class_id, subject, term, total_score').range(a, b)).then(setRecs)
+    fetchAll<Rec>((a, b) => supabase.from('sba_results').select('student_id, class_id, subject, term, total_score').range(a, b)).then(setSbaRecs)
+    // Exam types: each SBA setup points at an exam session; its raw scores (out of 100) live in exam_scores
+    ;(async () => {
+      const cf = (await fetchAll<{ class_id: string; subject: string; term: string; exam_session_id: string | null }>((a, b) =>
+        supabase.from('sba_configs').select('class_id, subject, term, exam_session_id').range(a, b))).filter((c) => c.exam_session_id)
+      const sids = [...new Set(cf.map((c) => c.exam_session_id as string))]
+      if (!sids.length) return
+      const { data: sess } = await supabase.from('exam_sessions').select('id, exam_type').in('id', sids)
+      const typeOf = new Map((sess ?? []).map((x) => [x.id as string, x.exam_type as string]))
+      const sc = await fetchAll<{ student_id: string; class_id: string; subject: string; exam_session_id: string; score: number | string | null }>((a, b) =>
+        supabase.from('exam_scores').select('student_id, class_id, subject, exam_session_id, score').in('exam_session_id', sids).range(a, b))
+      const cfgOf = new Map(cf.map((c) => [`${c.class_id}|${c.subject}|${c.exam_session_id}`, c.term]))
+      const out: (Rec & { type: string })[] = []
+      for (const x of sc) {
+        const t = cfgOf.get(`${x.class_id}|${x.subject}|${x.exam_session_id}`)
+        const type = typeOf.get(x.exam_session_id)
+        if (t && type && x.score !== null) out.push({ student_id: x.student_id, class_id: x.class_id, subject: x.subject, term: t, total_score: x.score, type })
+      }
+      setExamRecs(out)
+    })()
   }, [])
+
+  const examTypes = useMemo(() => [...new Set(examRecs.map((e) => e.type))].sort(), [examRecs])
+  const recs: Rec[] | null = useMemo(() => (sbaRecs === null ? null : exam ? examRecs.filter((e) => e.type === exam) : sbaRecs), [exam, examRecs, sbaRecs])
 
   /** Every student's totals, average, aggregate and position, for every term */
   const rows = useMemo(() => {
@@ -461,9 +485,15 @@ export default function HeadteacherPerformance() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-royal-900">Performance</h1>
-          <p className="mt-1 text-sm text-gray-500">The whole school, a level, a class or one student, term by term. Missing results count as 0.</p>
+          <p className="mt-1 text-sm text-gray-500">The whole school, a level, a class or one student, term by term. {exam ? `Showing ${exam} exam scores (out of 100). ` : 'Showing the overall SBA total. '}Missing results count as 0.</p>
         </div>
-        <select value={term} onChange={(e) => setTerm(e.target.value)} className={select}>{TERMS.map((t) => <option key={t}>{t}</option>)}</select>
+        <div className="flex flex-wrap gap-2">
+          <select value={exam} onChange={(e) => setExam(e.target.value)} className={select} aria-label="Exam type">
+            <option value="">Overall (SBA total)</option>
+            {examTypes.map((t) => <option key={t} value={t}>{t} exam only</option>)}
+          </select>
+          <select value={term} onChange={(e) => setTerm(e.target.value)} className={select}>{TERMS.map((t) => <option key={t}>{t}</option>)}</select>
+        </div>
       </div>
 
       <div className="mt-4 inline-flex rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-200">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { money } from '@/components/fees/fee-utils'
@@ -53,6 +53,7 @@ export default function AdminEarlierPayments() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -112,6 +113,7 @@ export default function AdminEarlierPayments() {
     setEntry({})
     setArrEdit({})
     setDone('')
+    setQuery('')
     void load()
   }, [load])
 
@@ -132,8 +134,15 @@ export default function AdminEarlierPayments() {
     return m
   }, [current, arrears])
 
-  const cellAmt = (sid: string, col: string) => Number(entry[sid]?.[col] ?? '') || 0
-  const cellBad = (sid: string, col: string) => cellAmt(sid, col) > (owed.get(sid)?.get(col) ?? 0) + 0.001
+  // What is typed in a cell is the balance the student STILL has to pay (not what was paid).
+  // The amount paid before the system = what was owed - the balance typed. A blank cell is left untouched.
+  const owedAmt = (sid: string, col: string) => owed.get(sid)?.get(col) ?? 0
+  const hasEntry = (sid: string, col: string) => (entry[sid]?.[col] ?? '') !== ''
+  const leftTyped = (sid: string, col: string) => Number(entry[sid]?.[col] ?? '')
+  const cellBad = (sid: string, col: string) =>
+    hasEntry(sid, col) && (!Number.isFinite(leftTyped(sid, col)) || leftTyped(sid, col) > owedAmt(sid, col) + 0.001)
+  const cellAmt = (sid: string, col: string) =>
+    !hasEntry(sid, col) || cellBad(sid, col) ? 0 : Math.max(0, Math.round((owedAmt(sid, col) - leftTyped(sid, col)) * 100) / 100)
   const setCell = (sid: string, col: string, v: string) => {
     setDone('')
     setEntry((e) => ({ ...e, [sid]: { ...e[sid], [col]: v.replace(/[^\d.]/g, '') } }))
@@ -178,6 +187,8 @@ export default function AdminEarlierPayments() {
   }
 
   const cols = [ARREARS, ...items]
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown = terms.length ? students.filter((st) => terms.every((t) => st.full_name.toLowerCase().includes(t))) : students
   const colTotal = (col: string) => students.reduce((s, st) => s + cellAmt(st.id, col), 0)
   const grand = cols.reduce((s, c) => s + colTotal(c), 0)
   const problems = students.reduce((n, st) => n + cols.filter((c) => cellBad(st.id, c)).length, 0)
@@ -210,9 +221,9 @@ export default function AdminEarlierPayments() {
         .sort((a, b) => periodKey(a.academic_year, a.term).localeCompare(periodKey(b.academic_year, b.term)) || a.item.localeCompare(b.item))
       for (const b of old) {
         if (left <= 0) break
-        const take = Math.min(left, Number(b.balance))
-        make(st.id, b.fee_structure_id, take)
-        left -= take
+        const take = Math.round(Math.min(left, Number(b.balance)) * 100) / 100
+        if (take > 0) make(st.id, b.fee_structure_id, take)
+        left = Math.round((left - take) * 100) / 100
       }
       for (const it of items) {
         const amt = cellAmt(st.id, it)
@@ -221,14 +232,20 @@ export default function AdminEarlierPayments() {
       }
     }
     const total = rows.reduce((s, r) => s + Number(r.amount), 0)
-    if (!confirm(`Save earlier payments for ${filled} entries in ${className} totalling ${money(total)}?`)) return
+    if (!confirm(`Update ${new Set(rows.map((r) => r.student_id)).size} student(s) in ${className}? This records ${money(total)} as paid before the system.`)) return
     setSaving(true)
     setError('')
     // one request, so either all of the class is saved or none of it
-    const { error: err } = await supabase.from('fee_payments').insert(rows)
+    const { data: saved, error: err } = await supabase.from('fee_payments').insert(rows).select('student_id')
     setSaving(false)
     if (err) return setError(`Nothing was saved: ${err.message}`)
-    setDone(`${className}: ${money(total)} saved as earlier payments (${filled} entries). They show on the Receipts page marked "Before system".`)
+    const nStud = new Set(rows.map((r) => r.student_id)).size
+    if (saved && saved.length < rows.length) {
+      setError(`Only ${saved.length} of ${rows.length} payments were saved. Check the list below before trying again.`)
+      void load()
+      return
+    }
+    setDone(`${className}: ${nStud} student(s) updated, ${money(total)} recorded as earlier payments (${filled} entries). They show on the Receipts page marked "Before system".`)
     setEntry({})
     void load()
   }
@@ -237,7 +254,7 @@ export default function AdminEarlierPayments() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-bold text-royal-900">Earlier payments</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Copy the bursar's list for one class here: what each parent paid <b>before we started using the system</b>. These are marked <b>"Before system"</b>, are not counted in today's collection, no SMS is sent, and no official receipt is printed.
+        Copy the bursar's list for one class here. For each student, type the <b>balance they still have to pay</b>; the system works out what was paid <b>before we started using the system</b>. Students you leave blank are not changed. These are marked <b>"Before system"</b>, are not counted in today's collection, no SMS is sent, and no official receipt is printed.
       </p>
 
       <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-3">
@@ -276,7 +293,7 @@ export default function AdminEarlierPayments() {
       )}
       {already && already.n > 0 && classId && (
         <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Already entered for this class: <b>{already.n}</b> earlier payments, {money(already.total)}. The grey figures below are what is still owed, so do not type those payments again.
+          Already entered for this class: <b>{already.n}</b> earlier payments, {money(already.total)}. The grey figures below are what is owed right now, so type the balance left after those payments.
         </p>
       )}
 
@@ -311,6 +328,24 @@ export default function AdminEarlierPayments() {
             )}
           </div>
 
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search student name…"
+                className={`${box} w-full pl-9`}
+              />
+            </div>
+            {terms.length > 0 && (
+              <p className="text-xs text-gray-500">
+                Showing {shown.length} of {students.length}. Amounts already typed for hidden students are kept and will still be saved.
+              </p>
+            )}
+          </div>
+
           <div className="mt-3 overflow-x-auto rounded-2xl bg-white shadow-sm">
             <table className="w-full min-w-[560px] border-collapse text-sm">
               <caption className="border-b border-gray-300 py-2 text-center text-sm font-bold uppercase tracking-wide text-royal-900">{className}</caption>
@@ -327,7 +362,12 @@ export default function AdminEarlierPayments() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((st) => (
+                {shown.length === 0 && (
+                  <tr>
+                    <td colSpan={cols.length + 1} className="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">No student matches "{query}".</td>
+                  </tr>
+                )}
+                {shown.map((st) => (
                   <tr key={st.id} className="odd:bg-white even:bg-gray-50/60">
                     <td className="border border-gray-300 px-3 py-1 font-medium uppercase text-royal-900">{st.full_name}</td>
                     {cols.map((col) => {
@@ -358,7 +398,7 @@ export default function AdminEarlierPayments() {
                               disabled={saving}
                               onChange={(e) => setCell(st.id, col, e.target.value)}
                               placeholder={left.toFixed(0)}
-                              title={bad ? `Only ${money(left)} is owed` : `Owed: ${money(left)}`}
+                              title={bad ? `Balance cannot be more than ${money(left)}` : `Owes now: ${money(left)}. Type the balance left to pay.`}
                               className={`h-9 w-full bg-transparent px-3 text-center outline-none placeholder:text-gray-300 focus:bg-royal-50 ${bad ? 'bg-red-50 text-red-700' : 'text-royal-900'}`}
                             />
                           ) : (
@@ -372,7 +412,7 @@ export default function AdminEarlierPayments() {
               </tbody>
               <tfoot>
                 <tr className="bg-royal-50 font-semibold text-royal-900">
-                  <td className="border border-gray-300 px-3 py-2">Total entered</td>
+                  <td className="border border-gray-300 px-3 py-2">Paid before (worked out)</td>
                   {cols.map((c) => (
                     <td key={c} className="border border-gray-300 px-3 py-2 text-center">{colTotal(c) ? colTotal(c).toFixed(2) : '—'}</td>
                   ))}
@@ -383,8 +423,8 @@ export default function AdminEarlierPayments() {
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-gray-500">
-              Type only what was paid. A dash means nothing is owed there. Grey figures show the amount still owed.
-              {problems > 0 && <b className="ml-1 text-red-600">{problems} amount(s) are more than what is owed.</b>}
+              Type the balance each student <b>still has to pay</b> (0 if fully paid). Leave blank to change nothing. A dash means nothing is owed there. Grey figures show what is owed now.
+              {problems > 0 && <b className="ml-1 text-red-600">{problems} balance(s) are more than what is owed.</b>}
             </p>
             <button
               onClick={save}
