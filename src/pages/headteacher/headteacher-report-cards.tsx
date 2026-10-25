@@ -53,10 +53,11 @@ export default function HeadteacherReportCards() {
     try {
       const cards = which === 'all' ? set.cards : set.cards.filter((c) => c.studentId === which)
       const safe = (s: string) => s.replace(/[^\w]+/g, '-')
+      const exam = set.examType ? `-${safe(set.examType)}` : ''
       await buildReportCardsPdf(
         cards,
-        { className: set.className, term, year, date, rollCount: set.rollCount, jhs9: set.jhs9 },
-        which === 'all' ? `report-cards-${safe(set.className)}-${safe(term)}.pdf` : `report-card-${safe(cards[0]?.name ?? 'student')}.pdf`,
+        { className: set.className, term, year, date, rollCount: set.rollCount, jhs9: set.jhs9, classTeacher: set.classTeacher, examType: set.examType },
+        which === 'all' ? `report-cards-${safe(set.className)}-${safe(term)}${exam}.pdf` : `report-card-${safe(cards[0]?.name ?? 'student')}${exam}.pdf`,
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not build the PDF')
@@ -126,9 +127,27 @@ export default function HeadteacherReportCards() {
             )
           )}
 
+          {set.examTypes.length > 1 && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              The saved results use different exams ({set.examTypes.join(', ')}). The cards are labelled for the most common one: {set.examType}.
+            </p>
+          )}
+          {!set.classTeacher?.name && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              No class teacher is assigned to {set.className}, so the teacher's name and phone are left blank on the cards.
+            </p>
+          )}
+          {set.classTeacher?.name && !set.classTeacher.phone && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {set.classTeacher.name} has no phone number saved, so the phone is left blank on the cards.
+            </p>
+          )}
+
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-gray-600">
               <b>{set.className}</b> · {set.rollCount} students · {set.subjects.length} subjects · {set.jhs9 ? 'Grades 1-9 with aggregate' : 'Grades A-E'}
+              {set.examType && <> · <b className="text-royal-900">{set.examType}</b></>}
+              {set.classTeacher?.name && <> · Class teacher: {set.classTeacher.name}{set.classTeacher.phone && ` (${set.classTeacher.phone})`}</>}
             </p>
             <button
               onClick={() => make('all')}

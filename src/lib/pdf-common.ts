@@ -17,6 +17,43 @@ export async function imageToDataUrl(src: string): Promise<string> {
   return c.toDataURL('image/png')
 }
 
+/**
+ * A photo cropped to fill a box (like CSS object-fit: cover) and shrunk to a small JPEG for the PDF.
+ * `aspect` is width / height of the box. Returns null when the picture cannot be loaded.
+ */
+export async function photoToDataUrl(src: string, aspect: number, maxW = 300): Promise<string | null> {
+  let objectUrl = ''
+  try {
+    const res = await fetch(src)
+    if (!res.ok) return null
+    objectUrl = URL.createObjectURL(await res.blob())
+    const img = new Image()
+    img.src = objectUrl
+    await img.decode()
+    const iw = img.naturalWidth
+    const ih = img.naturalHeight
+    if (!iw || !ih) return null
+    const w = Math.min(maxW, iw)
+    const h = Math.round(w / aspect)
+    const scale = Math.max(w / iw, h / ih)
+    const sw = w / scale
+    const sh = h / scale
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = h
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, w, h)
+    // crop from the centre, leaning towards the top so faces stay in the picture
+    ctx.drawImage(img, (iw - sw) / 2, (ih - sh) * 0.2, sw, sh, 0, 0, w, h)
+    return c.toDataURL('image/jpeg', 0.85)
+  } catch {
+    return null
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+  }
+}
+
 export function ordinal(n: number | null | undefined) {
   if (!n) return ''
   const v = n % 100

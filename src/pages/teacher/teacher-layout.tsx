@@ -4,34 +4,90 @@ import {
   LayoutDashboard,
   Users,
   ClipboardCheck,
-  // Database,
-  // FileText,
-  // ClipboardList,
+  Database,
+  FileText,
+  ClipboardList,
   QrCode,
   LogOut,
   ChevronRight,
   Bell,
   TrendingUp,
+  type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import schoolLogo from '@/assets/school-logo.png'
 
-const navItems = [
+interface NavItem {
+  label: string
+  to: string
+  icon: LucideIcon
+  end?: boolean
+}
+
+// Class teachers (with or without subjects), and every other teacher
+const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/teacher', icon: LayoutDashboard, end: true },
   { label: 'My Class', to: '/teacher/class', icon: Users },
   { label: 'Attendance', to: '/teacher/attendance', icon: ClipboardCheck },
-  // { label: 'Score Bank', to: '/teacher/score-bank', icon: Database },
-  // { label: 'Exams', to: '/teacher/exams', icon: FileText },
-  // { label: 'SBA', to: '/teacher/sba', icon: ClipboardList },
   { label: 'Performance', to: '/teacher/performance', icon: TrendingUp },
   { label: 'Clock In', to: '/teacher/clock-in', icon: QrCode },
 ]
 
-function SidebarContent() {
+// JHS subject teachers with no class of their own: no My Class / Attendance, their subject tools instead
+const jhsSubjectNavItems: NavItem[] = [
+  { label: 'Dashboard', to: '/teacher', icon: LayoutDashboard, end: true },
+  { label: 'Score Bank', to: '/teacher/score-bank', icon: Database },
+  { label: 'Exams', to: '/teacher/exams', icon: FileText },
+  { label: 'SBA', to: '/teacher/sba', icon: ClipboardList },
+  { label: 'Performance', to: '/teacher/performance', icon: TrendingUp },
+  { label: 'Clock In', to: '/teacher/clock-in', icon: QrCode },
+]
+
+/**
+ * True for a teacher who has subjects, all of them in JHS classes, and no class of their own.
+ * The answer is kept on this device so the menu does not flicker when the app opens.
+ */
+function useJhsSubjectOnly(profileId: string | undefined) {
+  const [value, setValue] = useState(false)
+
+  useEffect(() => {
+    if (!profileId) return
+    let active = true
+    const key = `jhs-subject-only:${profileId}`
+    try {
+      setValue(localStorage.getItem(key) === '1')
+    } catch {
+      /* storage unavailable: use the answer from the server */
+    }
+    void (async () => {
+      const [cls, subs] = await Promise.all([
+        supabase.from('classes').select('id').eq('teacher_id', profileId).maybeSingle(),
+        supabase.from('subject_assignments').select('class:classes(level_group)').eq('teacher_id', profileId),
+      ])
+      // offline or a failed request: keep whatever menu is already showing
+      if (!active || cls.error || subs.error) return
+      const rows = (subs.data ?? []) as unknown as { class: { level_group: string | null } | null }[]
+      const next = !cls.data && rows.length > 0 && rows.every((r) => r.class?.level_group === 'jhs')
+      setValue(next)
+      try {
+        localStorage.setItem(key, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [profileId])
+
+  return value
+}
+
+function SidebarContent({ items }: { items: NavItem[] }) {
   return (
     <nav className="flex flex-1 flex-col gap-1 p-3">
-      {navItems.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.label}
           to={item.to}
@@ -61,19 +117,19 @@ function SidebarContent() {
   )
 }
 
-function BottomNav() {
+function BottomNav({ items }: { items: NavItem[] }) {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 flex border-t border-gray-200 bg-white md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      {navItems.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.label}
           to={item.to}
           end={item.end}
           className={({ isActive }) =>
-            `flex flex-1 flex-col items-center gap-0.5 py-2 transition-colors ${
+            `flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 transition-colors ${
               isActive ? 'text-royal-600' : 'text-gray-400 hover:text-royal-500'
             }`
           }
@@ -81,7 +137,7 @@ function BottomNav() {
           {({ isActive }) => (
             <>
               <item.icon className={`h-5 w-5 ${isActive && 'scale-110'} transition-transform`} />
-              <span className={`text-[10px] font-medium ${isActive && 'font-semibold'}`}>
+              <span className={`max-w-full truncate text-[10px] font-medium ${isActive && 'font-semibold'}`}>
                 {item.label}
               </span>
             </>
@@ -137,6 +193,7 @@ export default function TeacherLayout() {
   const [unreadCount, setUnreadCount] = useState(0)
 
   const initials = (profile?.full_name || profile?.email || '?').trim().charAt(0).toUpperCase()
+  const items = useJhsSubjectOnly(profile?.id) ? jhsSubjectNavItems : navItems
 
   useEffect(() => {
     let active = true
@@ -174,7 +231,7 @@ export default function TeacherLayout() {
             <p className="text-xs text-royal-200">Teacher</p>
           </div>
         </div>
-        <SidebarContent />
+        <SidebarContent items={items} />
         <div className="border-t border-royal-500/30 p-3">
           <SignOutButton onSignOut={signOut} />
         </div>
@@ -236,7 +293,7 @@ export default function TeacherLayout() {
         </main>
       </div>
 
-      <BottomNav />
+      <BottomNav items={items} />
     </div>
   )
 }

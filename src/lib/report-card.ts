@@ -26,6 +26,8 @@ export interface Card {
   studentId: string
   name: string
   admission: string
+  /** stored photo path (private bucket); turned into a picture when the PDF is built */
+  photoUrl: string | null
   subjects: CardSubject[]
   total: number
   average: number | null
@@ -46,6 +48,10 @@ export interface CardSet {
   cards: Card[]
   subjects: string[]
   missingSubjects: string[]
+  classTeacher: { name: string; phone: string } | null
+  /** the exam the saved results are for (most common one when subjects differ), e.g. "Mid Term Exam" */
+  examType: string | null
+  examTypes: string[]
 }
 
 export const TERMS = ['Term 1', 'Term 2', 'Term 3']
@@ -100,14 +106,16 @@ const feeKind = (item: string): keyof Omit<FeesReminder, 'arrears' | 'grandTotal
 }
 
 export async function loadCardSet(cls: ClassOption, term: string, year: string, withFees: boolean): Promise<CardSet> {
-  const [studentsRes, resultsRes, subjectsRes] = await Promise.all([
-    supabase.from('students').select('id, full_name, admission_number').eq('class_id', cls.id).eq('is_active', true).order('full_name'),
+  const [studentsRes, resultsRes, subjectsRes, classRes, cfgRes] = await Promise.all([
+    supabase.from('students').select('id, full_name, admission_number, photo_url').eq('class_id', cls.id).eq('is_active', true).order('full_name'),
     supabase
       .from('sba_results')
       .select('student_id, subject, component_a, component_b, exam_score, total_score, grade, position')
       .eq('class_id', cls.id)
       .eq('term', term),
     cls.level_group ? supabase.from('subjects').select('name').eq('level_group', cls.level_group) : Promise.resolve({ data: [] as { name: string }[] }),
+    supabase.from('classes').select('teacher_id').eq('id', cls.id).maybeSingle(),
+    supabase.from('sba_configs').select('subject, exam_session_id').eq('class_id', cls.id).eq('term', term),
   ])
   const students = studentsRes.data ?? []
   const results = resultsRes.data ?? []
@@ -118,6 +126,25 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
   const withResults = new Set(results.map((r) => r.subject as string))
   const subjects = (levelSubjects.length ? levelSubjects : [...withResults]).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
   const missingSubjects = subjects.filter((n) => !withResults.has(n))
+
+  // Class teacher (name + phone) and the exam the saved results were set up for
+  const cfgs = ((cfgRes.data ?? []) as { subject: string; exam_session_id: string | null }[]).filter((c) => c.exam_session_id && withResults.has(c.subject))
+  const sessionIds = [...new Set(cfgs.map((c) => c.exam_session_id as string))]
+  const teacherId = (classRes.data?.teacher_id as string | null | undefined) ?? null
+  const [teacherRes, sessRes] = await Promise.all([
+    teacherId ? supabase.from('profiles').select('full_name, phone_number').eq('id', teacherId).maybeSingle() : Promise.resolve({ data: null }),
+    sessionIds.length ? supabase.from('exam_sessions').select('id, exam_type').in('id', sessionIds) : Promise.resolve({ data: [] as { id: string; exam_type: string }[] }),
+  ])
+  const t = teacherRes.data as { full_name: string | null; phone_number: string | null } | null
+  const classTeacher = t ? { name: t.full_name ?? '', phone: t.phone_number ?? '' } : null
+  const typeOf = new Map(((sessRes.data ?? []) as { id: string; exam_type: string }[]).map((x) => [x.id, x.exam_type]))
+  const typeCount = new Map<string, number>()
+  for (const c of cfgs) {
+    const ty = typeOf.get(c.exam_session_id as string)
+    if (ty) typeCount.set(ty, (typeCount.get(ty) ?? 0) + 1)
+  }
+  const examTypes = [...typeCount.keys()]
+  const examType = [...typeCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null
 
   const bySt = new Map<string, Map<string, (typeof results)[number]>>()
   for (const r of results) {
@@ -191,6 +218,7 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
       studentId: s.id,
       name: s.full_name,
       admission: s.admission_number,
+      photoUrl: (s.photo_url as string | null) ?? null,
       subjects: rows,
       total: Math.round(total * 100) / 100,
       average: scored.length ? Math.round((total / scored.length) * 100) / 100 : null,
@@ -212,5 +240,5 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
     c.position = pos
   })
 
-  return { className: cls.name, jhs9, rollCount: students.length, cards, subjects, missingSubjects }
+  return { className: cls.name, jhs9, rollCount: students.length, cards, subjects, missingSubjects, classTeacher, examType, examTypes }
 }

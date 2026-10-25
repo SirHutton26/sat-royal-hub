@@ -1,7 +1,8 @@
 import { jsPDF } from 'jspdf'
 import schoolLogo from '@/assets/school-logo.png'
 import type { Card } from '@/lib/report-card'
-import { SCHOOL, dmy, dotted, fitText, gh, imageToDataUrl, ordinal } from '@/lib/pdf-common'
+import { signedPhotoUrl } from '@/lib/photo'
+import { SCHOOL, dmy, dotted, fitText, gh, imageToDataUrl, ordinal, photoToDataUrl } from '@/lib/pdf-common'
 
 interface Opts {
   className: string
@@ -10,7 +11,13 @@ interface Opts {
   date: string
   rollCount: number
   jhs9?: boolean
+  classTeacher?: { name: string; phone: string } | null
+  /** e.g. "Mid Term Exam"; a mid-term card says so in its title */
+  examType?: string | null
 }
+
+// Student photo, top right of the header (mm)
+const PHOTO = { w: 20, h: 24, y: 10 }
 
 const M = 12 // page margin (mm)
 const W = 210 - M * 2
@@ -27,7 +34,7 @@ const COLS: { label: string; sub: string; w: number; align: 'left' | 'center' }[
 
 const num = (n: number | null) => (n === null ? '' : String(Math.round(n * 10) / 10))
 
-function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
+function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string, photo: string | null) {
   // Washed-out school logo behind everything
   doc.saveGraphicsState()
   doc.setGState(new (doc as unknown as { GState: new (o: { opacity: number }) => unknown }).GState({ opacity: 0.07 }) as never)
@@ -45,17 +52,32 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.text(SCHOOL.tel, 105 + 8, M + 18, { align: 'center' })
+  // Student photo (an empty frame when there is none)
+  const px = M + W - PHOTO.w
+  if (photo) doc.addImage(photo, 'JPEG', px, PHOTO.y, PHOTO.w, PHOTO.h)
+  else {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.setTextColor(150, 150, 150)
+    doc.text('PHOTO', px + PHOTO.w / 2, PHOTO.y + PHOTO.h / 2 + 1, { align: 'center' })
+    doc.setTextColor(30, 30, 30)
+  }
+  doc.setLineWidth(0.4)
+  doc.rect(px, PHOTO.y, PHOTO.w, PHOTO.h)
+
   doc.setLineWidth(0.9)
   doc.line(M, M + 23, M + W, M + 23)
   doc.setLineWidth(0.3)
   doc.line(M, M + 24.4, M + W, M + 24.4)
 
-  doc.setFillColor(40, 40, 40)
-  doc.roundedRect(M + W / 2 - 38, M + 28, 76, 8, 1.5, 1.5, 'F')
-  doc.setTextColor(255, 255, 255)
+  const title = o.examType && /mid/i.test(o.examType) ? "STUDENT'S MID-TERM REPORT CARD" : "STUDENT'S REPORT CARD"
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
-  doc.text("STUDENT'S REPORT CARD", M + W / 2, M + 33.4, { align: 'center' })
+  const bw = Math.max(76, doc.getTextWidth(title) + 12)
+  doc.setFillColor(40, 40, 40)
+  doc.roundedRect(M + W / 2 - bw / 2, M + 28, bw, 8, 1.5, 1.5, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.text(title, M + W / 2, M + 33.4, { align: 'center' })
   doc.setTextColor(30, 30, 30)
 
   // ---- Student details
@@ -76,9 +98,11 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
   info('NO. ON ROLL:', String(o.rollCount), M, y0 + 14, 56)
   info('POSITION IN CLASS:', c.position ? `${ordinal(c.position)} of ${o.rollCount}` : '', M + 62, y0 + 14, 56 + 6 + 8)
   info('DATE:', o.date, M + 138, y0 + 14, W - 138)
+  info('CLASS TEACHER:', o.classTeacher?.name ?? '', M, y0 + 21, 112)
+  info('TEL:', o.classTeacher?.phone ?? '', M + 118, y0 + 21, W - 118)
 
   // ---- Results table
-  let y = y0 + 21
+  let y = y0 + 28
   const headH = 11
   doc.setLineWidth(0.3)
   let x = M
@@ -100,7 +124,7 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
   y += headH
 
   const rows = c.subjects
-  const maxBody = 85 // mm available for rows
+  const maxBody = 78 // mm available for rows
   const rowH = Math.min(7.2, maxBody / Math.max(rows.length, 1))
   const bodySize = rowH < 5.5 ? 7 : 8
   rows.forEach((r) => {
@@ -196,14 +220,32 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string) {
   doc.text("Headteacher's sign: ____________________", M + W, 297 - M, { align: 'right' })
 }
 
+/** Student pictures as small JPEGs, a few at a time so a big class does not choke the phone */
+async function loadPhotos(cards: Card[]) {
+  const out = new Map<string, string | null>()
+  const withPhoto = cards.filter((c) => c.photoUrl)
+  const links = await Promise.all(withPhoto.map((c) => signedPhotoUrl(c.photoUrl)))
+  let next = 0
+  await Promise.all(
+    Array.from({ length: 6 }, async () => {
+      while (next < withPhoto.length) {
+        const k = next++
+        const url = links[k]
+        out.set(withPhoto[k].studentId, url ? await photoToDataUrl(url, PHOTO.w / PHOTO.h) : null)
+      }
+    }),
+  )
+  return out
+}
+
 /** One A4 page per student */
 export async function buildReportCardsPdf(cards: Card[], opts: Omit<Opts, 'date'> & { date: string }, filename: string) {
-  const logo = await imageToDataUrl(schoolLogo)
+  const [logo, photos] = await Promise.all([imageToDataUrl(schoolLogo), loadPhotos(cards)])
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
   const o = { ...opts, date: opts.date ? dmy(opts.date) : '' }
   cards.forEach((c, i) => {
     if (i > 0) doc.addPage()
-    drawCard(doc, c, o, logo)
+    drawCard(doc, c, o, logo, photos.get(c.studentId) ?? null)
   })
   doc.save(filename)
 }
