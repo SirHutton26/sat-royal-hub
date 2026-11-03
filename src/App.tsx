@@ -25,6 +25,8 @@ const AdminActivityLog = lazy(() => import('@/pages/admin/admin-activity-log'))
 const AdminFees = lazy(() => import('@/pages/admin/admin-fees'))
 const AdminArrears = lazy(() => import('@/pages/admin/admin-arrears'))
 const AdminDailyRates = lazy(() => import('@/pages/admin/admin-daily-rates'))
+const AdminResetPassword = lazy(() => import('@/pages/admin/admin-reset-password'))
+const TeacherReportCards = lazy(() => import('@/pages/teacher/teacher-report-cards'))
 const AdminNonStaff = lazy(() => import('@/pages/admin/admin-non-staff'))
 const AdminEarlierPayments = lazy(() => import('@/pages/admin/admin-earlier-payments'))
 
@@ -40,6 +42,7 @@ const HeadteacherToday = lazy(() => import('@/pages/headteacher/headteacher-toda
 const HeadteacherReportCards = lazy(() => import('@/pages/headteacher/headteacher-report-cards'))
 const HeadteacherSummary = lazy(() => import('@/pages/headteacher/headteacher-summary'))
 const HeadteacherPerformance = lazy(() => import('@/pages/headteacher/headteacher-performance'))
+const HeadteacherStaffParticulars = lazy(() => import('@/pages/headteacher/headteacher-staff-particulars'))
 
 const StorekeeperToday = lazy(() => import('@/pages/storekeeper/storekeeper-today'))
 const StorekeeperWeekly = lazy(() => import('@/pages/storekeeper/storekeeper-weekly'))
@@ -56,6 +59,8 @@ const BursarStudents = lazy(() => import('@/pages/bursar/bursar-students'))
 const BursarReports = lazy(() => import('@/pages/bursar/bursar-reports'))
 const BursarAttendance = lazy(() => import('@/pages/bursar/bursar-attendance'))
 const BursarDaily = lazy(() => import('@/pages/bursar/bursar-daily'))
+const BursarFeeReminders = lazy(() => import('@/pages/bursar/bursar-fee-reminders'))
+const AdminFeeRates = lazy(() => import('@/pages/admin/admin-fee-rates'))
 const BursarSettings = lazy(() => import('@/pages/bursar/bursar-settings'))
 const BursarActivity = lazy(() => import('@/pages/bursar/bursar-activity'))
 
@@ -79,6 +84,7 @@ const TeacherFees = lazy(() => import('@/pages/teacher/teacher-fees'))
 const TeacherClockInSign = lazy(() => import('@/pages/teacher/teacher-clockin-sign'))
 const TeacherClockInHistory = lazy(() => import('@/pages/teacher/teacher-clockin-history'))
 const TeacherPerformance = lazy(() => import('@/pages/teacher/teacher-performance'))
+const TeacherLessonPlans = lazy(() => import('@/pages/teacher/teacher-lesson-plans'))
 
 
 export default function App() {
@@ -108,9 +114,11 @@ export default function App() {
                 <Route path="store" element={<StorekeeperWeekly />} />
                 <Route path="data-house" element={<AdminDataHouse />} />
                 <Route path="activity-log" element={<AdminActivityLog />} />
+                <Route path="fees/rates" element={<AdminFeeRates />} />
                 <Route path="fees/arrears" element={<AdminArrears />} />
                 <Route path="earlier-payments" element={<AdminEarlierPayments />} />
                 <Route path="non-staff" element={<AdminNonStaff />} />
+                <Route path="reset-password" element={<AdminResetPassword />} />
                 <Route path="daily-rates" element={<AdminDailyRates />} />
               </Route>
             </Route>
@@ -128,6 +136,7 @@ export default function App() {
                 <Route path="store" element={<StorekeeperWeekly />} />
                 <Route path="report-cards" element={<HeadteacherReportCards />} />
                 <Route path="performance" element={<HeadteacherPerformance />} />
+                <Route path="staff-particulars" element={<HeadteacherStaffParticulars />} />
                 <Route path="clock-in" element={<PortalClockIn />} />
                 <Route path="settings" element={<BursarSettings />} />
               </Route>
@@ -159,6 +168,7 @@ export default function App() {
                 <Route path="attendance" element={<BursarAttendance />} />
                 <Route path="activity" element={<BursarActivity />} />
                 <Route path="daily" element={<BursarDaily />} />
+                <Route path="fee-reminders" element={<BursarFeeReminders />} />
                 <Route path="settings" element={<BursarSettings />} />
               </Route>
             </Route>
@@ -179,12 +189,14 @@ export default function App() {
                 <Route path="exams" element={<TeacherExams />} />
                 <Route path="score-bank" element={<TeacherScoreBank />} />
                 <Route path="sba" element={<TeacherSba />} />
+                <Route path="report-cards" element={<TeacherReportCards />} />
                 <Route path="sba/print" element={<TeacherSbaPrint />} />
                 <Route path="fees" element={<TeacherFees />} />
                 <Route path="/teacher/master-result" element={<TeacherMasterResult />} />
                 <Route path="clock-in/sign" element={<TeacherClockInSign />} />
                 <Route path="clock-in/history" element={<TeacherClockInHistory />} />
                 <Route path="performance" element={<TeacherPerformance />} />
+                <Route path="lesson-plans" element={<TeacherLessonPlans />} />
               </Route>
             </Route>
 

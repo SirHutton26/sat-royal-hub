@@ -11,6 +11,8 @@ export interface CardSubject {
 }
 export interface FeesReminder {
   arrears: number
+  /** fees (not exams) still unpaid for the current term */
+  current: number
   tuition: number
   exams: number
   feeding: number
@@ -41,6 +43,8 @@ export interface ClassOption {
   level_group: string | null
 }
 export interface CardSet {
+  /** set when the daily/weekly fee rates could not be applied (missing table, rates or term dates) */
+  feesNote: string
   className: string
   /** Basic 9 uses the 1-9 scale and shows the best-six aggregate; every other class uses A-E and has no aggregate */
   jhs9: boolean
@@ -155,6 +159,7 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
 
   // Fees reminder: what is still owed up to this term (arrears) + next term's fee items
   const fees = new Map<string, FeesReminder>()
+  let feesNote = ''
   if (withFees && students.length) {
     const nxt = nextPeriod(term, year)
     const { data: bal } = await supabase
@@ -162,19 +167,43 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
       .select('student_id, item, academic_year, term, balance')
       .in('student_id', students.map((s) => s.id))
     const upTo = `${year}|${term}`
-    for (const s of students) fees.set(s.id, { arrears: 0, tuition: 0, exams: 0, feeding: 0, ict: 0, extra: 0, grandTotal: 0 })
+    for (const s of students) fees.set(s.id, { arrears: 0, current: 0, tuition: 0, exams: 0, feeding: 0, ict: 0, extra: 0, grandTotal: 0 })
     for (const b of bal ?? []) {
       const f = fees.get(b.student_id)
       if (!f) continue
       const amount = Number(b.balance ?? 0)
       const key = `${b.academic_year}|${b.term}`
-      if (key <= upTo) {
-        if (amount > 0) f.arrears += amount
-      } else if (b.academic_year === nxt.year && b.term === nxt.term) {
-        f[feeKind(String(b.item))] += Math.max(amount, 0)
+      const kind = feeKind(String(b.item))
+      if (key < upTo) {
+        if (amount > 0) f.arrears += amount // earlier terms
+      } else if (key === upTo) {
+        // this term: exams balance on its own, the rest of the school fees as the current balance
+        if (kind === 'exams') f.exams += Math.max(amount, 0)
+        else if (kind === 'tuition') f.current += Math.max(amount, 0)
+      } else if (b.academic_year === nxt.year && b.term === nxt.term && kind !== 'exams') {
+        f[kind] += Math.max(amount, 0) // next term's tuition, feeding, ICT and extra classes
       }
     }
-    for (const f of fees.values()) f.grandTotal = f.arrears + f.tuition + f.exams + f.feeding + f.ict + f.extra
+    // Daily / weekly rates set by the admin replace the term items when a rate exists:
+    // feeding & extra classes = per school day, ICT = per week of next term
+    const rateRes = await supabase.from('fee_rates').select('kind, level_group, amount')
+    const lvl = (cls.level_group ?? '').trim().toLowerCase()
+    const rate = (kind: string, level: string) => {
+      const r = (rateRes.data ?? []).find((x) => x.kind === kind && String(x.level_group).trim().toLowerCase() === level)
+      return r ? Number(r.amount) : null
+    }
+    // Shown exactly as the admin entered them: feeding and extra classes per day, ICT per week
+    const feed = rate('feeding', lvl)
+    const extra = rate('extra', '')
+    const ict = rate('ict', lvl)
+    if (rateRes.error) feesNote = `Could not read the daily/weekly fee rates: ${rateRes.error.message}. Run the fee_rates migration.`
+    else if (feed === null && extra === null && ict === null) feesNote = `No feeding, extra-classes or ICT rate is set for this class's level (${cls.level_group ?? 'none'}). Set them under Fees > Daily & weekly fees.`
+    for (const f of fees.values()) {
+      if (feed !== null) f.feeding = feed
+      if (extra !== null) f.extra = extra
+      if (ict !== null) f.ict = ict
+    }
+    for (const f of fees.values()) f.grandTotal = f.arrears + f.current + f.exams
   }
 
   const cards: Card[] = students.map((s) => {
@@ -240,5 +269,5 @@ export async function loadCardSet(cls: ClassOption, term: string, year: string, 
     c.position = pos
   })
 
-  return { className: cls.name, jhs9, rollCount: students.length, cards, subjects, missingSubjects, classTeacher, examType, examTypes }
+  return { feesNote, className: cls.name, jhs9, rollCount: students.length, cards, subjects, missingSubjects, classTeacher, examType, examTypes }
 }

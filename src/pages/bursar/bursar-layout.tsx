@@ -9,6 +9,7 @@ import {
   QrCode,
   ClipboardList,
   Settings,
+  BellRing,
   LogOut,
   type LucideIcon,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Daily Collections', short: 'Daily', to: '/bursar/daily', icon: Coins },
   { label: 'Students', to: '/bursar/students', icon: Users },
   { label: 'Receipts', to: '/bursar/receipts', icon: Receipt },
+  { label: 'Fee Reminders', short: 'Remind', to: '/bursar/fee-reminders', icon: BellRing },
   { label: 'Reports', to: '/bursar/reports', icon: BarChart3 },
   { label: 'Attendance', short: 'Clock In', to: '/bursar/attendance', icon: QrCode },
   { label: 'Activity Log', short: 'Log', to: '/bursar/activity', icon: ClipboardList },

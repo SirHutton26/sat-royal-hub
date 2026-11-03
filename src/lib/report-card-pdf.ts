@@ -202,16 +202,18 @@ function drawCard(doc: jsPDF, c: Card, o: Opts, logo: string, photo: string | nu
     }
   }
   const half = W / 2 - 5
+  const R = M + W / 2 + 5
   feeLine('Arrears from last term GH¢', f ? f.arrears.toFixed(2) : '', M, y, half)
-  feeLine('Tuition fees GH¢', f ? f.tuition.toFixed(2) : '', M + W / 2 + 5, y, half)
+  feeLine('Tuition fees GH¢', f ? f.tuition.toFixed(2) : '', R, y, half)
+  y += 8
+  feeLine('Current Balance GH¢', f ? f.current.toFixed(2) : '', M, y, half)
+  feeLine('Extra Classes (Daily) GH¢', f ? f.extra.toFixed(2) : '', R, y, half)
   y += 8
   feeLine('Exams fees GH¢', f ? f.exams.toFixed(2) : '', M, y, half)
-  feeLine('Extra Classes GH¢', f ? f.extra.toFixed(2) : '', M + W / 2 + 5, y, half)
+  feeLine('Feeding fees (Daily) GH¢', f ? f.feeding.toFixed(2) : '', R, y, half)
   y += 8
-  feeLine('Feeding fees GH¢', f ? f.feeding.toFixed(2) : '', M, y, half)
-  feeLine('GRAND TOTAL GH¢', f ? f.grandTotal.toFixed(2) : '', M + W / 2 + 5, y, half, true)
-  y += 8
-  feeLine('I.C.T. fees GH¢', f ? f.ict.toFixed(2) : '', M, y, half)
+  feeLine('GRAND TOTAL GH¢', f ? f.grandTotal.toFixed(2) : '', M, y, half, true)
+  feeLine('I.C.T. fees (Weekly) GH¢', f ? f.ict.toFixed(2) : '', R, y, half)
   void money
 
   doc.setFont('helvetica', 'italic')

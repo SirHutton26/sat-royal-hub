@@ -563,6 +563,13 @@ export default function AdminFees() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
+            to="/admin/fees/rates"
+            className="flex items-center gap-2 rounded-lg border border-royal-200 bg-white px-4 py-2 text-sm font-semibold text-royal-700 transition hover:bg-royal-50"
+          >
+            <Wallet className="h-4 w-4" />
+            Daily &amp; weekly fees
+          </Link>
+          <Link
             to="/admin/daily-rates"
             className="flex items-center gap-2 rounded-lg border border-royal-200 bg-white px-4 py-2 text-sm font-semibold text-royal-700 transition hover:bg-royal-50"
           >

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { BarChart3, BellRing, ClipboardCheck, FileText, Fingerprint, GraduationCap, LayoutDashboard, Settings, Store, UserCheck, Wallet, LogOut, type LucideIcon } from 'lucide-react'
+import { BarChart3, BellRing, ClipboardCheck, Contact, FileText, Fingerprint, GraduationCap, LayoutDashboard, Settings, Store, UserCheck, Wallet, LogOut, type LucideIcon } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
 
@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Alerts', to: '/headteacher/alerts', icon: BellRing },
   { label: 'Attendance', to: '/headteacher/attendance', icon: ClipboardCheck },
   { label: 'Staff Report', short: 'Staff', to: '/headteacher/staff-report', icon: UserCheck },
+  { label: 'Staff Particulars', short: 'Records', to: '/headteacher/staff-particulars', icon: Contact },
   { label: 'Students', to: '/headteacher/students', icon: GraduationCap },
   { label: 'Results', to: '/headteacher/results', icon: BarChart3 },
   { label: 'Report Cards', short: 'Cards', to: '/headteacher/report-cards', icon: FileText },

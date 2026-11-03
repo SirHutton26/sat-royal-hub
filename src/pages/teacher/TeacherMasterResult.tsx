@@ -533,29 +533,29 @@ export default function TeacherMasterResult() {
         </div>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl bg-white shadow-sm">
+      <div className="mt-4 max-h-[70vh] overflow-auto rounded-xl bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-100 text-xs uppercase text-gray-500">
             <tr>
-              <th className="px-4 py-3">SN</th>
-              <th className="sticky left-0 z-10 min-w-[11rem] bg-white px-4 py-3">Name</th>
+              <th className="sticky top-0 z-20 bg-white px-4 py-3">SN</th>
+              <th className="sticky left-0 top-0 z-30 min-w-[11rem] bg-white px-4 py-3">Name</th>
               {sheet.subjects.map((s) => {
                 const missing = sheet.missingSubjects.includes(s)
                 return (
                   <th
                     key={s}
                     title={missing ? `${s} — no saved results yet` : s}
-                    className={`min-w-[5.5rem] px-3 py-3 text-center leading-tight ${missing ? 'text-gray-300' : ''}`}
+                    className={`sticky top-0 z-20 bg-white min-w-[5.5rem] px-3 py-3 text-center leading-tight ${missing ? 'text-gray-300' : ''}`}
                   >
                     {s}
                   </th>
                 )
               })}
-              <th className="px-3 py-3 text-center">Total</th>
-              <th className="px-3 py-3 text-center">Agg.</th>
-              <th className="px-3 py-3 text-center">Avg</th>
-              <th className="px-3 py-3 text-center">Grade</th>
-              <th className="px-3 py-3 text-center">Position</th>
+              <th className="sticky top-0 z-20 bg-white px-3 py-3 text-center">Total</th>
+              <th className="sticky top-0 z-20 bg-white px-3 py-3 text-center">Agg.</th>
+              <th className="sticky top-0 z-20 bg-white px-3 py-3 text-center">Avg</th>
+              <th className="sticky top-0 z-20 bg-white px-3 py-3 text-center">Grade</th>
+              <th className="sticky top-0 z-20 bg-white px-3 py-3 text-center">Position</th>
             </tr>
           </thead>
           <tbody>

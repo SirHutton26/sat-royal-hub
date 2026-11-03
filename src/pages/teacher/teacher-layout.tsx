@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Bell,
   TrendingUp,
+  FileDown,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: 'My Class', to: '/teacher/class', icon: Users },
   { label: 'Attendance', to: '/teacher/attendance', icon: ClipboardCheck },
   { label: 'Performance', to: '/teacher/performance', icon: TrendingUp },
+  { label: 'Report Cards', to: '/teacher/report-cards', icon: FileDown },
   { label: 'Clock In', to: '/teacher/clock-in', icon: QrCode },
 ]
 

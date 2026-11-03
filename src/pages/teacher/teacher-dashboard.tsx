@@ -30,20 +30,31 @@ const LEVEL_META: Record<string, { label: string; solid: string; soft: string; t
 }
 const DEFAULT_LEVEL = { label: '', solid: 'bg-royal-600', soft: 'bg-royal-50', text: 'text-royal-700' }
 
-const CLASS_TEACHER_ACTIONS = [
+interface QuickAction {
+  label: string
+  desc: string
+  to: string
+  icon: typeof Users
+  /** shown as a gold card */
+  highlight?: boolean
+}
+
+const CLASS_TEACHER_ACTIONS: QuickAction[] = [
   { label: 'My Class', desc: 'View your students', to: '/teacher/class', icon: Users },
   { label: 'Attendance', desc: "Take today's register", to: '/teacher/attendance', icon: ClipboardCheck },
   { label: 'Score Bank', desc: 'Record task and test scores', to: '/teacher/score-bank', icon: Database },
   { label: 'Exams', desc: 'Enter exam scores', to: '/teacher/exams', icon: FileText },
   { label: 'SBA', desc: 'Compute SBA results', to: '/teacher/sba', icon: ClipboardList },
+  { label: 'Lesson Plans', desc: 'Write plans with AI', to: '/teacher/lesson-plans', icon: Sparkles, highlight: true },
   { label: 'Clock In', desc: 'Mark your attendance', to: '/teacher/clock-in', icon: QrCode },
   { label: 'Alerts', desc: 'School announcements', to: '/teacher/alerts', icon: Bell },
 ]
 
-const SUBJECT_TEACHER_ACTIONS = [
+const SUBJECT_TEACHER_ACTIONS: QuickAction[] = [
   { label: 'Score Bank', desc: 'Record task and test scores', to: '/teacher/score-bank', icon: Database },
   { label: 'Exams', desc: 'Enter exam scores', to: '/teacher/exams', icon: FileText },
   { label: 'SBA', desc: 'Compute SBA results', to: '/teacher/sba', icon: ClipboardList },
+  { label: 'Lesson Plans', desc: 'Write plans with AI', to: '/teacher/lesson-plans', icon: Sparkles, highlight: true },
   { label: 'Clock In', desc: 'Mark your attendance', to: '/teacher/clock-in', icon: QrCode },
   { label: 'Alerts', desc: 'School announcements', to: '/teacher/alerts', icon: Bell },
 ]
@@ -199,7 +210,7 @@ function ClassMakeupCard({
   )
 }
 
-function QuickActionsGrid({ actions }: { actions: typeof CLASS_TEACHER_ACTIONS }) {
+function QuickActionsGrid({ actions }: { actions: QuickAction[] }) {
   return (
     <div className="mt-8">
       <h2 className="text-sm font-semibold text-royal-900">Quick actions</h2>
@@ -208,14 +219,28 @@ function QuickActionsGrid({ actions }: { actions: typeof CLASS_TEACHER_ACTIONS }
           <Link
             key={a.label}
             to={a.to}
-            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-royal-300 hover:shadow-md"
+            className={`group relative overflow-hidden rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+              a.highlight
+                ? 'border-gold-500 bg-gradient-to-br from-gold-400 to-gold-500 hover:shadow-lg'
+                : 'border-gray-200 bg-white hover:border-royal-300'
+            }`}
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-royal-50 text-royal-600 transition-colors group-hover:bg-royal-600 group-hover:text-white">
+            <div
+              className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
+                a.highlight
+                  ? 'bg-royal-900/10 text-royal-900 group-hover:bg-royal-900 group-hover:text-gold-400'
+                  : 'bg-royal-50 text-royal-600 group-hover:bg-royal-600 group-hover:text-white'
+              }`}
+            >
               <a.icon className="h-5 w-5" />
             </div>
             <p className="mt-3 text-sm font-semibold text-royal-900">{a.label}</p>
-            <p className="mt-0.5 text-xs text-gray-500">{a.desc}</p>
-            <ChevronRight className="absolute right-3 top-4 h-4 w-4 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-royal-500" />
+            <p className={`mt-0.5 text-xs ${a.highlight ? 'text-royal-900/70' : 'text-gray-500'}`}>{a.desc}</p>
+            <ChevronRight
+              className={`absolute right-3 top-4 h-4 w-4 transition-all group-hover:translate-x-0.5 ${
+                a.highlight ? 'text-royal-900/50 group-hover:text-royal-900' : 'text-gray-300 group-hover:text-royal-500'
+              }`}
+            />
           </Link>
         ))}
       </div>

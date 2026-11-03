@@ -20,6 +20,7 @@ import {
   Store,
   History,
   ClipboardList,
+  KeyRound,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 import schoolLogo from '@/assets/school-logo.png'
@@ -40,6 +41,7 @@ const navItems = [
   { label: 'Store', to: '/admin/store', icon: Store },
   { label: 'Data House', to: '/admin/data-house', icon: Database },
   { label: 'Activity Log', to: '/admin/activity-log', icon: History },
+  { label: 'Reset Password', to: '/admin/reset-password', icon: KeyRound },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

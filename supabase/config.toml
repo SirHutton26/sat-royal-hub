@@ -453,3 +453,15 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/send-receipt-sms/deno.json"
 entrypoint = "./functions/send-receipt-sms/index.ts"
+
+[functions.reset-password]
+enabled = true
+verify_jwt = false
+import_map = "./functions/reset-password/deno.json"
+entrypoint = "./functions/reset-password/index.ts"
+
+[functions.send-fee-reminders]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-fee-reminders/deno.json"
+entrypoint = "./functions/send-fee-reminders/index.ts"
