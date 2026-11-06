@@ -18,6 +18,7 @@ const AdminStudents = lazy(() => import('@/pages/admin/admin-students'))
 const AdminAlerts = lazy(() => import('@/pages/admin/admin-alerts'))
 const AdminSubjects = lazy(() => import('@/pages/admin/admin-subjects'))
 const AdminExams = lazy(() => import('@/pages/admin/admin-exams'))
+const AdminCass = lazy(() => import('@/pages/admin/admin-cass'))
 const AdminSettings = lazy(() => import('@/pages/admin/admin-settings'))
 const AdminStaffAttendance = lazy(() => import('@/pages/admin/admin-staff-attendance'))
 const AdminDataHouse = lazy(() => import('@/pages/admin/admin-data-house'))
@@ -108,6 +109,7 @@ export default function App() {
                 <Route path="alerts" element={<AdminAlerts />} />
                 <Route path="subjects" element={<AdminSubjects />} />
                 <Route path="exams" element={<AdminExams />} />
+                <Route path="cass" element={<AdminCass />} />
                 <Route path="settings" element={<AdminSettings />} />
                 <Route path="staff-attendance" element={<AdminStaffAttendance />} />
                 <Route path="fees" element={<AdminFees />} />

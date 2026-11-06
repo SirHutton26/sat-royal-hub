@@ -20,6 +20,7 @@ import {
   Store,
   History,
   ClipboardList,
+  ClipboardCheck,
   KeyRound,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -34,6 +35,7 @@ const navItems = [
   { label: 'Non-Staff', to: '/admin/non-staff', icon: UserCog },
   { label: 'Staff', to: '/admin/staff-attendance', icon: Fingerprint },
   { label: 'Exams', to: '/admin/exams', icon: CalendarClock },
+  { label: 'CASS', to: '/admin/cass', icon: ClipboardCheck },
   { label: 'Alerts', to: '/admin/alerts', icon: Megaphone },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
   { label: 'Fees', to: '/admin/fees', icon: Wallet },
