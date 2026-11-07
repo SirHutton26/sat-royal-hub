@@ -514,7 +514,7 @@ export default function TeacherCassEntry({
       </div>
 
       <div className="mt-3 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:px-4">
+        <div className="hidden items-center gap-3 border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:flex sm:px-4">
           <span className="w-6 shrink-0 text-center">#</span>
           <span className="min-w-0 flex-1 pl-12">Student</span>
           <span className="w-20 shrink-0 text-center">Year 1</span>
@@ -531,35 +531,44 @@ export default function TeacherCassEntry({
         ) : (
           <ul className="divide-y divide-gray-100">
             {rows.map(({ s, sn }) => (
-              <li key={s.id} className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
-                <span className="w-6 shrink-0 text-center text-xs font-semibold text-gray-400">{sn}</span>
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-royal-50 text-xs font-bold text-royal-600">
-                  {initials(s.full_name)}
+              <li key={s.id} className="px-3 py-3 sm:flex sm:items-center sm:gap-3 sm:px-4 sm:py-2.5">
+                {/* name block: full name on phones (wraps), single line on wider screens */}
+                <div className="flex min-w-0 items-start gap-2.5 sm:flex-1 sm:items-center sm:gap-3">
+                  <span className="mt-0.5 w-5 shrink-0 text-center text-xs font-semibold text-gray-400 sm:mt-0 sm:w-6">{sn}</span>
+                  <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-royal-50 text-xs font-bold text-royal-600 sm:flex">
+                    {initials(s.full_name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold leading-snug text-royal-900 sm:truncate">{s.full_name}</p>
+                    {s.admission_number && <p className="truncate text-[11px] text-gray-400">{s.admission_number}</p>}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-royal-900">{s.full_name}</p>
-                  {s.admission_number && <p className="truncate text-[11px] text-gray-400">{s.admission_number}</p>}
+                <div className="mt-2 flex gap-3 pl-7 sm:mt-0 sm:gap-3 sm:pl-0">
+                  {(['y1', 'y2'] as const).map((field) => (
+                    <label key={field} className="flex-1 sm:flex-none">
+                      <span className="mb-1 block text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400 sm:hidden">
+                        {field === 'y1' ? 'Year 1' : 'Year 2'}
+                      </span>
+                      <input
+                        data-cass-input
+                        type="number"
+                        inputMode="decimal"
+                        enterKeyHint="next"
+                        min={0}
+                        max={100}
+                        value={scores[s.id]?.[field] ?? ''}
+                        onChange={(e) => handleChange(s.id, field, e.target.value)}
+                        onKeyDown={handleKey}
+                        onFocus={(e) => e.currentTarget.select()}
+                        placeholder="000"
+                        aria-label={`${field === 'y1' ? 'Year 1' : 'Year 2'} CASS score for ${s.full_name}`}
+                        className={`w-full rounded-xl border px-2 py-2 text-center text-sm font-bold outline-none transition focus:ring-2 sm:w-20 ${scoreInputClasses(
+                          scores[s.id]?.[field],
+                        )}`}
+                      />
+                    </label>
+                  ))}
                 </div>
-                {(['y1', 'y2'] as const).map((field) => (
-                  <input
-                    key={field}
-                    data-cass-input
-                    type="number"
-                    inputMode="decimal"
-                    enterKeyHint="next"
-                    min={0}
-                    max={100}
-                    value={scores[s.id]?.[field] ?? ''}
-                    onChange={(e) => handleChange(s.id, field, e.target.value)}
-                    onKeyDown={handleKey}
-                    onFocus={(e) => e.currentTarget.select()}
-                    placeholder="000"
-                    aria-label={`${field === 'y1' ? 'Year 1' : 'Year 2'} CASS score for ${s.full_name}`}
-                    className={`w-20 shrink-0 rounded-xl border px-2 py-2 text-center text-sm font-bold outline-none transition focus:ring-2 ${scoreInputClasses(
-                      scores[s.id]?.[field],
-                    )}`}
-                  />
-                ))}
               </li>
             ))}
           </ul>
